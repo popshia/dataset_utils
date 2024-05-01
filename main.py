@@ -10,19 +10,15 @@ class Arguments:
     train_dir = "\n"
     val_dir = "\n"
     aug = False
-
     # label format conversion
     input_format = "\n"
     output_format = "\n"
     label_dir = "\n"
     classes_txt = "\n"
-
     # split train/val
     train_percentage = 0
-
     # img color conversion
     dataset_dir = "\n"
-
     # draw yolo labels
     output_count = 0
 
@@ -47,11 +43,7 @@ def get_generate_txt_options():
     args = Arguments()
     args.train_dir = input("Path of training directory: ")
     args.val_dir = input("Path of validating directory: ")
-    args.aug = (
-        True
-        if input("Is the dataset augmented by color conversion? (y/n) ") == "y"
-        else False
-    )
+    args.aug = True if input("Is the dataset augmented? (y/n) ") == "y" else False
     return args
 
 
@@ -67,7 +59,7 @@ def get_label_format_convert_options():
 def get_split_convert_options():
     args = Arguments()
     args.dataset_dir = input("Dataset dir: ")
-    args.train_percentage = int(input("How much is the training percentage? (0-100)"))
+    args.train_percentage = int(input("How much percentage is training split? (0-100)"))
     return args
 
 
