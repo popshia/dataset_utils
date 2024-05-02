@@ -132,55 +132,7 @@ def letter_box(
 def load_video_and_inference(args):
     session = ort.InferenceSession(args.onnx, providers=ORT_PROVIDERS)
 
-    if Path(args.input).is_dir():
-        for i, data in enumerate(Path(args.input).resolve().glob("**/*")):
-            print("\n", end="")
-            print(i + 1, ":", data)
-            print("-" * os.get_terminal_size().columns)
-            cap = cv2.VideoCapture(data.resolve().as_posix())
-            frame_count = 1
-
-            while cap.isOpened():
-                ret, frame = cap.read()
-
-                if not ret:
-                    print("Can't receive frame. Exiting ...")
-                    break
-
-                start = time.time()
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                org_imgs = [frame.copy()]
-                image = frame.copy()
-                image, ratio, dwdh = letter_box(
-                    image, new_shape=(args.img_size, args.img_size), auto=False
-                )
-                image, im = proprocess_img(image)
-                model_outputs = inference_with_onnx_session(session, im)
-                detection_results = plot_and_show_results(
-                    model_outputs, org_imgs, dwdh, ratio, args.conf_thr
-                )
-
-                # inference time of first data's first frame involves loading data onto gpu, ignore due to not accurate
-                if i == 0 and frame_count == 1:
-                    pass
-                else:
-                    print(
-                        "frame count:",
-                        frame_count,
-                        "\ninference time:",
-                        time.time() - start,
-                        "\nfps:",
-                        1 / (time.time() - start),
-                    )
-
-                if cv2.waitKey(1) == ord("q"):
-                    break
-
-                frame_count += 1
-                print("-" * os.get_terminal_size().columns)
-
-            cap.release()
-    else:
+    if args.input[:4] == "rtsp" or not Path(args.input).is_dir():
         print("\n", end="")
         print(args.input)
         print("-" * os.get_terminal_size().columns)
@@ -228,6 +180,54 @@ def load_video_and_inference(args):
             print("-" * os.get_terminal_size().columns)
 
         cap.release()
+    else:
+        for i, data in enumerate(Path(args.input).resolve().glob("**/*")):
+            print("\n", end="")
+            print(i + 1, ":", data)
+            print("-" * os.get_terminal_size().columns)
+            cap = cv2.VideoCapture(data.resolve().as_posix())
+            frame_count = 1
+
+            while cap.isOpened():
+                ret, frame = cap.read()
+
+                if not ret:
+                    print("Can't receive frame. Exiting ...")
+                    break
+
+                start = time.time()
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                org_imgs = [frame.copy()]
+                image = frame.copy()
+                image, ratio, dwdh = letter_box(
+                    image, new_shape=(args.img_size, args.img_size), auto=False
+                )
+                image, im = proprocess_img(image)
+                model_outputs = inference_with_onnx_session(session, im)
+                detection_results = plot_and_show_results(
+                    model_outputs, org_imgs, dwdh, ratio, args.conf_thr
+                )
+
+                # inference time of first data's first frame involves loading data onto gpu, ignore due to not accurate
+                if i == 0 and frame_count == 1:
+                    pass
+                else:
+                    print(
+                        "frame count:",
+                        frame_count,
+                        "\ninference time:",
+                        time.time() - start,
+                        "\nfps:",
+                        1 / (time.time() - start),
+                    )
+
+                if cv2.waitKey(1) == ord("q"):
+                    break
+
+                frame_count += 1
+                print("-" * os.get_terminal_size().columns)
+
+            cap.release()
 
 
 if __name__ == "__main__":
@@ -250,7 +250,9 @@ during inference, press "q" to close cv2 window or skip to next data.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("onnx", type=str, help="onnx file")
-    parser.add_argument("input", type=str, help="inference data file or directory")
+    parser.add_argument(
+        "input", type=str, help="inference rtsp url, single file or video directory"
+    )
     parser.add_argument("img_size", type=int, help="img size used in training phase")
     parser.add_argument("conf_thr", type=float, help="conf threshold")
     args = parser.parse_args()
