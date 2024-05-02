@@ -151,7 +151,9 @@ def load_video_and_inference(args):
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 org_imgs = [frame.copy()]
                 image = frame.copy()
-                image, ratio, dwdh = letter_box(image, auto=False)
+                image, ratio, dwdh = letter_box(
+                    image, new_shape=(args.img_size, args.img_size), auto=False
+                )
                 image, im = proprocess_img(image)
                 model_outputs = inference_with_onnx_session(session, im)
                 detection_results = plot_and_show_results(
@@ -246,6 +248,7 @@ during inference, press "q" to close cv2 window or skip to next data.""",
     )
     parser.add_argument("onnx", type=str, help="onnx file")
     parser.add_argument("input", type=str, help="inference data file or directory")
+    parser.add_argument("img_size", type=int, help="img size used in training phase")
     parser.add_argument("conf_thr", type=float, help="conf threshold")
     args = parser.parse_args()
     load_video_and_inference(args)
