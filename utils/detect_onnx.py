@@ -4,6 +4,8 @@ import os
 import pprint
 import random
 import time
+from ntpath import isdir
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -46,23 +48,29 @@ def plot_and_show_results(outputs, org_imgs, dwdh, ratio, conf_thr):
 
     for _, (batch_id, x1, y1, x2, y2, cls_id, conf) in enumerate(outputs):
         if conf >= conf_thr:
+            # read img
             image = org_imgs[int(batch_id)]
+            # set box thickness
             tl = round(0.002 * (image.shape[0] + image.shape[1]) / 2) + 1
+            # coordinates
             box = np.array([x1, y1, x2, y2])
             box -= np.array(dwdh * 2)
             box /= ratio
             box = box.round().astype(np.int32).tolist()
+            # cls_id and cls_name
             cls_id = int(cls_id)
-            conf = round(float(conf), 3)
             label = CLASS_NAMES[cls_id]
             color = COLORS[label]
             label += " " + str(conf)
+            # conf
+            conf = round(float(conf), 3)
+            # get detections
+            detection = image[box[1] : box[3], box[0] : box[2]]
+            # cv2.imshow("Result", detection)
             # draw box
             cv2.rectangle(
                 image, box[:2], box[2:], color, thickness=tl, lineType=cv2.LINE_AA
             )
-            # get detections
-            detection = image[box[:2], box[2:]]
             detect_results.append(detection)
             # label box
             c1, c2 = box[:2], box[2:]
@@ -89,7 +97,7 @@ def plot_and_show_results(outputs, org_imgs, dwdh, ratio, conf_thr):
 
 
 def letter_box(
-    im, new_shape=(320, 320), color=(114, 114, 114), auto=True, scaleup=True, stride=32
+    im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleup=True, stride=32
 ):
     # Resize and pad image while meeting stride-multiple constraints
     shape = im.shape[:2]  # current shape [height, width]
@@ -124,13 +132,57 @@ def letter_box(
 def load_video_and_inference(args):
     session = ort.InferenceSession(args.onnx, providers=ORT_PROVIDERS)
 
-    for i, data in enumerate(os.listdir(args.input_dir)):
+    if Path(args.input).is_dir():
+        for i, data in enumerate(Path(args.input).resolve().glob("**/*")):
+            print("\n", end="")
+            print(i + 1, ":", data)
+            print("-" * os.get_terminal_size().columns)
+            cap = cv2.VideoCapture(data.resolve().as_posix())
+            frame_count = 1
+
+            while cap.isOpened():
+                ret, frame = cap.read()
+
+                if not ret:
+                    print("Can't receive frame. Exiting ...")
+                    break
+
+                start = time.time()
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                org_imgs = [frame.copy()]
+                image = frame.copy()
+                image, ratio, dwdh = letter_box(image, auto=False)
+                image, im = proprocess_img(image)
+                model_outputs = inference_with_onnx_session(session, im)
+                detection_results = plot_and_show_results(
+                    model_outputs, org_imgs, dwdh, ratio, args.conf_thr
+                )
+
+                # inference time of first data's first frame involves loading data onto gpu, ignore due to not accurate
+                if i == 0 and frame_count == 1:
+                    pass
+                else:
+                    print(
+                        "frame count:",
+                        frame_count,
+                        "\ninference time:",
+                        time.time() - start,
+                        "\nfps:",
+                        1 / (time.time() - start),
+                    )
+
+                if cv2.waitKey(1) == ord("q"):
+                    break
+
+                frame_count += 1
+                print("-" * os.get_terminal_size().columns)
+
+            cap.release()
+    else:
         print("\n", end="")
-        print(i + 1, ":", data)
-        print(
-            "--------------------------------------------------------------------------"
-        )
-        cap = cv2.VideoCapture(os.path.join(os.getcwd(), args.input_dir, data))
+        print(args.input)
+        print("-" * os.get_terminal_size().columns)
+        cap = cv2.VideoCapture(Path(args.input).resolve().as_posix())
         frame_count = 1
 
         while cap.isOpened():
@@ -152,7 +204,7 @@ def load_video_and_inference(args):
             )
 
             # inference time of first data's first frame involves loading data onto gpu, ignore due to not accurate
-            if i == 0 and frame_count == 1:
+            if frame_count == 1:
                 pass
             else:
                 print(
@@ -168,9 +220,7 @@ def load_video_and_inference(args):
                 break
 
             frame_count += 1
-            print(
-                "--------------------------------------------------------------------------"
-            )
+            print("-" * os.get_terminal_size().columns)
 
         cap.release()
 
@@ -195,7 +245,7 @@ during inference, press "q" to close cv2 window or skip to next data.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("onnx", type=str, help="onnx file")
-    parser.add_argument("input_dir", type=str, help="inference data directory")
+    parser.add_argument("input", type=str, help="inference data file or directory")
     parser.add_argument("conf_thr", type=float, help="conf threshold")
     args = parser.parse_args()
     load_video_and_inference(args)
