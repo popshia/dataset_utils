@@ -184,7 +184,10 @@ def load_video_and_inference(args):
         print("\n", end="")
         print(args.input)
         print("-" * os.get_terminal_size().columns)
-        cap = cv2.VideoCapture(Path(args.input).resolve().as_posix())
+        if "rtsp://" in args.input:
+            cap = cv2.VideoCapture(args.input)
+        else:
+            cap = cv2.VideoCapture(Path(args.input).resolve().as_posix())
         frame_count = 1
 
         while cap.isOpened():
