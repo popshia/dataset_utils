@@ -1,4 +1,3 @@
-# coding=gbk
 # Inference using ONNX model
 import argparse
 import os
@@ -24,7 +23,7 @@ ORT_PROVIDERS = (
 )
 
 
-def PreprocessImg(image):
+def proprocess_img(image):
     image = image.transpose((2, 0, 1))
     image = np.expand_dims(image, 0)
     image = np.ascontiguousarray(image)
@@ -33,7 +32,7 @@ def PreprocessImg(image):
     return image, nor_image
 
 
-def InferenceWithOnnxSession(session, im):
+def inference_with_onnx_session(session, im):
     outname = [i.name for i in session.get_outputs()]
     inname = [i.name for i in session.get_inputs()]
     input = {inname[0]: im}
@@ -42,7 +41,9 @@ def InferenceWithOnnxSession(session, im):
     return model_outs
 
 
-def DrawAndShowResults(outputs, org_imgs, dwdh, ratio, conf_thr):
+def plot_and_show_results(outputs, org_imgs, dwdh, ratio, conf_thr):
+    detect_results = []
+
     for _, (batch_id, x1, y1, x2, y2, cls_id, conf) in enumerate(outputs):
         if conf >= conf_thr:
             image = org_imgs[int(batch_id)]
@@ -56,9 +57,14 @@ def DrawAndShowResults(outputs, org_imgs, dwdh, ratio, conf_thr):
             label = CLASS_NAMES[cls_id]
             color = COLORS[label]
             label += " " + str(conf)
+            # draw box
             cv2.rectangle(
                 image, box[:2], box[2:], color, thickness=tl, lineType=cv2.LINE_AA
             )
+            # get detections
+            detection = image[box[:2], box[2:]]
+            detect_results.append(detection)
+            # label box
             c1, c2 = box[:2], box[2:]
             tf = max(tl - 1, 1)
             t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
@@ -79,16 +85,11 @@ def DrawAndShowResults(outputs, org_imgs, dwdh, ratio, conf_thr):
         cv2.cvtColor(org_imgs[0], cv2.COLOR_RGB2BGR), (1080, 720)
     )
     cv2.imshow("Result", resized_result)
+    return detect_results
 
 
-def LetterBox(
-    # im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleup=True, stride=32
-    im,
-    new_shape=(320, 320),
-    color=(114, 114, 114),
-    auto=True,
-    scaleup=True,
-    stride=32,
+def letter_box(
+    im, new_shape=(320, 320), color=(114, 114, 114), auto=True, scaleup=True, stride=32
 ):
     # Resize and pad image while meeting stride-multiple constraints
     shape = im.shape[:2]  # current shape [height, width]
@@ -120,7 +121,7 @@ def LetterBox(
     return im, r, (dw, dh)
 
 
-def LoadVideoAndInference(args):
+def load_video_and_inference(args):
     session = ort.InferenceSession(args.onnx, providers=ORT_PROVIDERS)
 
     for i, data in enumerate(os.listdir(args.input_dir)):
@@ -143,10 +144,12 @@ def LoadVideoAndInference(args):
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             org_imgs = [frame.copy()]
             image = frame.copy()
-            image, ratio, dwdh = LetterBox(image, auto=False)
-            image, im = PreprocessImg(image)
-            model_outputs = InferenceWithOnnxSession(session, im)
-            DrawAndShowResults(model_outputs, org_imgs, dwdh, ratio, args.conf_thr)
+            image, ratio, dwdh = letter_box(image, auto=False)
+            image, im = proprocess_img(image)
+            model_outputs = inference_with_onnx_session(session, im)
+            detection_results = plot_and_show_results(
+                model_outputs, org_imgs, dwdh, ratio, args.conf_thr
+            )
 
             # inference time of first data's first frame involves loading data onto gpu, ignore due to not accurate
             if i == 0 and frame_count == 1:
@@ -195,4 +198,4 @@ during inference, press "q" to close cv2 window or skip to next data.""",
     parser.add_argument("input_dir", type=str, help="inference data directory")
     parser.add_argument("conf_thr", type=float, help="conf threshold")
     args = parser.parse_args()
-    LoadVideoAndInference(args)
+    load_video_and_inference(args)
