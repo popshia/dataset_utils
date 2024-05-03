@@ -4,7 +4,6 @@ import os
 import pprint
 import random
 import time
-from ntpath import isdir
 from pathlib import Path
 
 import cv2
@@ -12,17 +11,26 @@ import numpy as np
 import onnxruntime as ort
 import torch
 
-# CHANGE YOUR CLASS NAMES
-CLASS_NAMES = ["small_car", "large_car", "motor"]
-COLORS = {
-    name: [random.randint(0, 255) for _ in range(3)]
-    for _, name in enumerate(CLASS_NAMES)
-}
 ORT_PROVIDERS = (
     ["CUDAExecutionProvider", "CPUExecutionProvider"]
     if torch.cuda.is_available()
     else ["CPUExecutionProvider"]
 )
+
+
+def get_class_names(classes_txt):
+    with open(Path(classes_txt).resolve(), "r") as classes:
+        cls_names_list = classes.readlines()
+        cls_name_list = [cls_name.strip() for cls_name in cls_names_list]
+        print("\nClasses: ", cls_name_list, "\n")
+        return cls_name_list
+
+
+def set_color_by_class_count(classes):
+    return {
+        name: [random.randint(0, 255) for _ in range(3)]
+        for _, name in enumerate(classes)
+    }
 
 
 def proprocess_img(image):
@@ -43,7 +51,7 @@ def inference_with_onnx_session(session, im):
     return model_outs
 
 
-def plot_and_show_results(outputs, org_imgs, dwdh, ratio, conf_thr):
+def plot_and_show_results(outputs, org_imgs, dwdh, ratio, conf_thr, classes, colors):
     detect_results = []
 
     for _, (batch_id, x1, y1, x2, y2, cls_id, conf) in enumerate(outputs):
@@ -59,8 +67,8 @@ def plot_and_show_results(outputs, org_imgs, dwdh, ratio, conf_thr):
             box = box.round().astype(np.int32).tolist()
             # cls_id and cls_name
             cls_id = int(cls_id)
-            label = CLASS_NAMES[cls_id]
-            color = COLORS[label]
+            label = classes[cls_id]
+            color = colors[label]
             label += " " + str(conf)
             # conf
             conf = round(float(conf), 3)
@@ -131,6 +139,8 @@ def letter_box(
 
 def load_video_and_inference(args):
     session = ort.InferenceSession(args.onnx, providers=ORT_PROVIDERS)
+    classes = get_class_names(args.classes_txt)
+    colors = set_color_by_class_count(classes)
 
     if args.input[:4] == "rtsp" or not Path(args.input).is_dir():
         print("\n", end="")
@@ -157,7 +167,7 @@ def load_video_and_inference(args):
             image, im = proprocess_img(image)
             model_outputs = inference_with_onnx_session(session, im)
             detection_results = plot_and_show_results(
-                model_outputs, org_imgs, dwdh, ratio, args.conf_thr
+                model_outputs, org_imgs, dwdh, ratio, args.conf_thr, classes, colors
             )
 
             # inference time of first data's first frame involves loading data onto gpu, ignore due to not accurate
@@ -205,7 +215,7 @@ def load_video_and_inference(args):
                 image, im = proprocess_img(image)
                 model_outputs = inference_with_onnx_session(session, im)
                 detection_results = plot_and_show_results(
-                    model_outputs, org_imgs, dwdh, ratio, args.conf_thr
+                    model_outputs, org_imgs, dwdh, ratio, args.conf_thr, classes, colors
                 )
 
                 # inference time of first data's first frame involves loading data onto gpu, ignore due to not accurate
@@ -255,6 +265,6 @@ during inference, press "q" to close cv2 window or skip to next data.""",
     )
     parser.add_argument("img_size", type=int, help="img size used in training phase")
     parser.add_argument("conf_thr", type=float, help="conf threshold")
-    parser.add_argument("--classes_txt", type=str, help="'classes.txt' file path")
+    parser.add_argument("classes_txt", type=str, help="'classes.txt' file path")
     args = parser.parse_args()
     load_video_and_inference(args)
