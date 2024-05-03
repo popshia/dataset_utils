@@ -13,7 +13,7 @@ import onnxruntime as ort
 import torch
 
 # CHANGE YOUR CLASS NAMES
-CLASS_NAMES = ["ship", "boat", "fishing_boat", "sampon_boat"]
+CLASS_NAMES = ["small_car", "large_car", "motor"]
 COLORS = {
     name: [random.randint(0, 255) for _ in range(3)]
     for _, name in enumerate(CLASS_NAMES)
@@ -255,5 +255,6 @@ during inference, press "q" to close cv2 window or skip to next data.""",
     )
     parser.add_argument("img_size", type=int, help="img size used in training phase")
     parser.add_argument("conf_thr", type=float, help="conf threshold")
+    parser.add_argument("--classes_txt", type=str, help="'classes.txt' file path")
     args = parser.parse_args()
     load_video_and_inference(args)
