@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from utils.convert_color import convert_imgs
+from utils.detect_onnx import load_video_and_inference
 from utils.draw_yolo_boxes import plot_yolo_labels
 from utils.generate_txt import generate_txt
 from utils.label_format_converter import convert_label_format
@@ -23,6 +24,10 @@ class Arguments:
     dataset_dir = "\n"
     # draw yolo labels
     output_count = 0
+    # onnx inference
+    onnx_path = "\n"
+    img_size = 640
+    conf_thr = 0.7
 
 
 def script_function_selection():
@@ -35,7 +40,8 @@ Please select the function you want to proceed:
 3. Split train/val sets (w.i.p.).
 4. Data augmentation using color conversions.
 5. Plot yolo labels and save image results to './save_imgs'.
-6. Exit.
+6. Inference using yolov7 onnx.
+7. Exit.
 
 Your selection: """
     )
@@ -80,6 +86,16 @@ def get_plot_label_options():
     return args
 
 
+def get_onnx_inference_options():
+    args = Arguments()
+    args.onnx_path = input("Path of onnx file: ")
+    args.dataset_dir = input("Inference rtsp url, single file or video directory: ")
+    args.img_size = int(input("Training image size: "))
+    args.conf_thr = float(input("Bounding box threshold: (0-1)"))
+    args.classes_txt = input("Path of 'classes.txt' file: ")
+    return args
+
+
 if __name__ == "__main__":
     user_selection = script_function_selection()
 
@@ -100,4 +116,7 @@ if __name__ == "__main__":
             args = get_plot_label_options()
             plot_yolo_labels(args)
         case 6:
+            args = get_onnx_inference_options()
+            load_video_and_inference(args)
+        case 7:
             exit(0)
