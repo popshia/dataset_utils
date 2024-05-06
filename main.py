@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from utils.convert_color import convert_imgs
 from utils.draw_yolo_boxes import plot_yolo_labels
 from utils.generate_txt import generate_txt
@@ -33,6 +35,7 @@ Please select the function you want to proceed:
 3. Split train/val sets (w.i.p.).
 4. Data augmentation using color conversions.
 5. Plot yolo labels and save image results to './save_imgs'.
+6. Exit.
 
 Your selection: """
     )
@@ -96,3 +99,5 @@ if __name__ == "__main__":
         case 5:
             args = get_plot_label_options()
             plot_yolo_labels(args)
+        case 6:
+            exit(0)
