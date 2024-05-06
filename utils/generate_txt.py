@@ -5,8 +5,8 @@ from pathlib import Path
 def generate_txt(opts):
     train_dir = Path(opts.train_dir).resolve()
     val_dir = Path(opts.val_dir).resolve()
-    train_txt = Path(train_dir) / "train.txt"
-    val_txt = Path(val_dir) / "val.txt"
+    train_txt = Path(train_dir).parents[0] / "train.txt"
+    val_txt = Path(val_dir).parents[0] / "val.txt"
 
     # train dir
     with open(train_txt, "w") as train_txt:
