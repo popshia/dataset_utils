@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from utils.convert_color import convert_imgs
 from utils.detect_onnx import load_video_and_inference
 from utils.draw_yolo_boxes import plot_yolo_labels
