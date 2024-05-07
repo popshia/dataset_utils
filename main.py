@@ -1,4 +1,5 @@
 from utils.convert_color import convert_imgs
+from utils.count_object import count_dataset_objects
 from utils.detect_onnx import load_video_and_inference
 from utils.draw_yolo_boxes import plot_yolo_labels
 from utils.generate_txt import generate_txt
@@ -39,7 +40,8 @@ Please select the function you want to proceed:
 4. Data augmentation using color conversions.
 5. Plot yolo labels and save image results to './save_imgs'.
 6. Inference using yolov7 onnx.
-7. Exit.
+7. Count dataset objects.
+8. Exit.
 
 Your selection: """
     )
@@ -65,20 +67,20 @@ def get_label_format_convert_options():
 
 def get_split_convert_options():
     args = Arguments()
-    args.dataset_dir = input("Dataset dir: ")
+    args.dataset_dir = input("Dataset directory: ")
     args.train_percentage = int(input("How much percentage is training split? (0-100)"))
     return args
 
 
 def get_img_color_convert_options():
     args = Arguments()
-    args.dataset_dir = input("Dataset dir: ")
+    args.dataset_dir = input("Dataset directory: ")
     return args
 
 
 def get_plot_label_options():
     args = Arguments()
-    args.dataset_dir = input("Dataset dir: ")
+    args.dataset_dir = input("Dataset directory: ")
     args.classes_txt = input("Path of 'classes.txt' file: ")
     args.output_count = int(input("How many labels would you like to plot? "))
     return args
@@ -91,6 +93,12 @@ def get_onnx_inference_options():
     args.img_size = int(input("Training image size: "))
     args.conf_thr = float(input("Bounding box threshold: (0-1)"))
     args.classes_txt = input("Path of 'classes.txt' file: ")
+    return args
+
+
+def get_count_object_options():
+    args = Arguments()
+    args.dataset_dir = input("Dataset directory: ")
     return args
 
 
@@ -117,4 +125,7 @@ if __name__ == "__main__":
             args = get_onnx_inference_options()
             load_video_and_inference(args)
         case 7:
+            args = get_count_object_options()
+            count_dataset_objects(args)
+        case 8:
             exit(0)
