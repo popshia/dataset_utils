@@ -1,0 +1,4 @@
+ship
+boat
+fishing_boat
+sampan_boat

@@ -47,7 +47,7 @@ def inference_with_onnx_session(session, im):
     inname = [i.name for i in session.get_inputs()]
     input = {inname[0]: im}
     model_outs = session.run(outname, input)[0]
-    pprint.pprint(model_outs)
+    # pprint.pprint(model_outs)
     return model_outs
 
 
@@ -96,6 +96,7 @@ def plot_and_show_results(outputs, org_imgs, dwdh, ratio, conf_thr, classes, col
                 thickness=tf,
                 lineType=cv2.LINE_AA,
             )
+            print(label, box)
 
     resized_result = cv2.resize(
         cv2.cvtColor(org_imgs[0], cv2.COLOR_RGB2BGR), (1080, 720)
