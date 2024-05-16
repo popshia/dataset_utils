@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 import torch
+from alive_progress import alive_bar
 
 ORT_PROVIDERS = (
     ["CUDAExecutionProvider", "CPUExecutionProvider"]
@@ -51,7 +52,9 @@ def inference_with_onnx_session(session, im):
     return model_outs
 
 
-def plot_and_show_results(outputs, org_imgs, dwdh, ratio, conf_thr, classes, colors):
+def plot_and_show_results(
+    outputs, org_imgs, dwdh, ratio, conf_thr, classes, colors, args, output
+):
     detect_results = []
 
     for _, (batch_id, x1, y1, x2, y2, cls_id, conf) in enumerate(outputs):
@@ -96,11 +99,15 @@ def plot_and_show_results(outputs, org_imgs, dwdh, ratio, conf_thr, classes, col
                 thickness=tf,
                 lineType=cv2.LINE_AA,
             )
-            print(label, box)
+            # print(label, box)
 
     resized_result = cv2.resize(
         cv2.cvtColor(org_imgs[0], cv2.COLOR_RGB2BGR), (1080, 720)
     )
+
+    if args.save_video:
+        output.write(cv2.cvtColor(org_imgs[0], cv2.COLOR_RGB2BGR))
+
     cv2.imshow("Result", resized_result)
     return detect_results
 
@@ -144,62 +151,25 @@ def load_video_and_inference(args):
     colors = set_color_by_class_count(classes)
 
     if args.input[:4] == "rtsp" or not Path(args.input).is_dir():
-        print("\n", end="")
         print(args.input)
-        print("-" * os.get_terminal_size().columns)
         if "rtsp://" in args.input:
             cap = cv2.VideoCapture(args.input)
         else:
             cap = cv2.VideoCapture(Path(args.input).resolve().as_posix())
-        frame_count = 1
 
-        while cap.isOpened():
-            ret, frame = cap.read()
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-            if not ret:
-                print("Can't receive frame. Exiting ...")
-                break
-
-            start = time.time()
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            org_imgs = [frame.copy()]
-            image = frame.copy()
-            image, ratio, dwdh = letter_box(image, auto=False)
-            image, im = proprocess_img(image)
-            model_outputs = inference_with_onnx_session(session, im)
-            detection_results = plot_and_show_results(
-                model_outputs, org_imgs, dwdh, ratio, args.conf_thr, classes, colors
+        if args.save_video:
+            fourcc = cv2.VideoWriter.fourcc(*"mp4v")
+            output = cv2.VideoWriter(
+                Path(args.input).stem + "_result.mp4",
+                fourcc,
+                25,
+                (int(cap.get(3)), int(cap.get(4))),
             )
 
-            # inference time of first data's first frame involves loading data onto gpu, ignore due to not accurate
-            if frame_count == 1:
-                pass
-            else:
-                print(
-                    "frame count:",
-                    frame_count,
-                    "\ninference time:",
-                    time.time() - start,
-                    "\nfps:",
-                    1 / (time.time() - start),
-                )
-
-            if cv2.waitKey(1) == ord("q"):
-                break
-
-            frame_count += 1
-            print("-" * os.get_terminal_size().columns)
-
-        cap.release()
-    else:
-        for i, data in enumerate(Path(args.input).resolve().glob("**/*")):
-            print("\n", end="")
-            print(i + 1, ":", data)
-            print("-" * os.get_terminal_size().columns)
-            cap = cv2.VideoCapture(data.resolve().as_posix())
-            frame_count = 1
-
-            while cap.isOpened():
+        with alive_bar(frame_count) as bar:
+            for i in range(frame_count):
                 ret, frame = cap.read()
 
                 if not ret:
@@ -210,45 +180,97 @@ def load_video_and_inference(args):
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 org_imgs = [frame.copy()]
                 image = frame.copy()
-                image, ratio, dwdh = letter_box(
-                    image, new_shape=(args.img_size, args.img_size), auto=False
-                )
+                image, ratio, dwdh = letter_box(image, auto=False)
                 image, im = proprocess_img(image)
                 model_outputs = inference_with_onnx_session(session, im)
                 detection_results = plot_and_show_results(
-                    model_outputs, org_imgs, dwdh, ratio, args.conf_thr, classes, colors
+                    model_outputs,
+                    org_imgs,
+                    dwdh,
+                    ratio,
+                    args.conf_thr,
+                    classes,
+                    colors,
+                    args,
+                    output if args.save_video else None,
                 )
 
                 # inference time of first data's first frame involves loading data onto gpu, ignore due to not accurate
-                if i == 0 and frame_count == 1:
+                if frame_count + 1 == 1:
                     pass
                 else:
-                    print(
-                        "frame count:",
-                        frame_count,
-                        "\ninference time:",
-                        time.time() - start,
-                        "\nfps:",
-                        1 / (time.time() - start),
-                    )
+                    bar.text("fps: " + str(int(1 / (time.time() - start))))
 
                 if cv2.waitKey(1) == ord("q"):
                     break
 
                 frame_count += 1
-                print("-" * os.get_terminal_size().columns)
+                bar()
 
             cap.release()
+    else:
+        for i, data in enumerate(Path(args.input).resolve().glob("**/*")):
+            print(i + 1, ":", data)
+            cap = cv2.VideoCapture(data.resolve().as_posix())
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+            if args.save_video:
+                fourcc = cv2.VideoWriter.fourcc(*"mp4v")
+                output = cv2.VideoWriter(
+                    Path(args.input).stem + "_result.mp4",
+                    fourcc,
+                    25,
+                    (int(cap.get(3)), int(cap.get(4))),
+                )
+
+            with alive_bar(frame_count) as bar:
+                while cap.isOpened():
+                    ret, frame = cap.read()
+
+                    if not ret:
+                        print("Can't receive frame. Exiting ...")
+                        break
+
+                    start = time.time()
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    org_imgs = [frame.copy()]
+                    image = frame.copy()
+                    image, ratio, dwdh = letter_box(
+                        image, new_shape=(args.img_size, args.img_size), auto=False
+                    )
+                    image, im = proprocess_img(image)
+                    model_outputs = inference_with_onnx_session(session, im)
+                    detection_results = plot_and_show_results(
+                        model_outputs,
+                        org_imgs,
+                        dwdh,
+                        ratio,
+                        args.conf_thr,
+                        classes,
+                        colors,
+                        args,
+                        output if args.save_video else None,
+                    )
+
+                    # inference time of first data's first frame involves loading data onto gpu, ignore due to not accurate
+                    if i == 0 and frame_count + 1 == 1:
+                        pass
+                    else:
+                        bar.text("fps: " + str(int(1 / (time.time() - start))))
+
+                    if cv2.waitKey(1) == ord("q"):
+                        break
+
+                    frame_count += 1
+                    bar()
+
+                cap.release()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog="onnx_inference.py",
         description="""
-#######################################################
-# CHANGE THE CLASS NAMES ON #14 FIRST !!!!!!!!!!!!!!! #
-#######################################################
-
 Export .pt weight file with command below:
 > python export.py --weights ./{YOUR_PT_FILE}.pt --grid --end2end --simplify --topk-all 100 --iou-thres 0.65 --conf-thres 0.35 --img-size 640 640 --max-wh 640
   # For onnxruntime, you need to specify this value as an integer,
@@ -267,5 +289,8 @@ during inference, press "q" to close cv2 window or skip to next data.""",
     parser.add_argument("img_size", type=int, help="img size used in training phase")
     parser.add_argument("conf_thr", type=float, help="conf threshold")
     parser.add_argument("classes_txt", type=str, help="'classes.txt' file path")
+    parser.add_argument(
+        "--save-video", action="store_true", help="save detection output video"
+    )
     args = parser.parse_args()
     load_video_and_inference(args)
