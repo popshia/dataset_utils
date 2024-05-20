@@ -1,7 +1,5 @@
 # Inference using ONNX model
 import argparse
-import os
-import pprint
 import random
 import time
 from pathlib import Path
@@ -48,7 +46,6 @@ def inference_with_onnx_session(session, im):
     inname = [i.name for i in session.get_inputs()]
     input = {inname[0]: im}
     model_outs = session.run(outname, input)[0]
-    # pprint.pprint(model_outs)
     return model_outs
 
 
@@ -72,9 +69,9 @@ def plot_and_show_results(
             cls_id = int(cls_id)
             label = classes[cls_id]
             color = colors[label]
-            label += " " + str(conf)
             # conf
             conf = round(float(conf), 3)
+            label += " " + str(conf)
             # get detections
             detection = image[box[1] : box[3], box[0] : box[2]]
             # cv2.imshow("Result", detection)
@@ -84,22 +81,23 @@ def plot_and_show_results(
             )
             detect_results.append(detection)
             # label box
-            c1, c2 = box[:2], box[2:]
-            tf = max(tl - 1, 1)
-            t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
-            c2 = (c1[0] + t_size[0], c1[1] - t_size[1] - 3)
-            cv2.rectangle(image, c1, c2, color, -1, cv2.LINE_AA)
-            cv2.putText(
-                image,
-                label,
-                (c1[0], c1[1] - 2),
-                0,
-                tl / 3,
-                [255, 255, 255],
-                thickness=tf,
-                lineType=cv2.LINE_AA,
-            )
-            # print(label, box)
+            if not args.no_label:
+                c1, c2 = box[:2], box[2:]
+                tf = max(tl - 1, 1)
+                t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
+                c2 = (c1[0] + t_size[0], c1[1] - t_size[1] - 3)
+                cv2.rectangle(image, c1, c2, color, -1, cv2.LINE_AA)
+                cv2.putText(
+                    image,
+                    label,
+                    (c1[0], c1[1] - 2),
+                    0,
+                    tl / 3,
+                    [255, 255, 255],
+                    thickness=tf,
+                    lineType=cv2.LINE_AA,
+                )
+                # print(label, box)
 
     resized_result = cv2.resize(
         cv2.cvtColor(org_imgs[0], cv2.COLOR_RGB2BGR), (1080, 720)
@@ -149,9 +147,9 @@ def load_video_and_inference(args):
     session = ort.InferenceSession(args.onnx, providers=ORT_PROVIDERS)
     classes = get_class_names(args.classes_txt)
     colors = set_color_by_class_count(classes)
+    print(args.input)
 
     if args.input[:4] == "rtsp" or not Path(args.input).is_dir():
-        print(args.input)
         if "rtsp://" in args.input:
             cap = cv2.VideoCapture(args.input)
         else:
@@ -292,5 +290,6 @@ during inference, press "q" to close cv2 window or skip to next data.""",
     parser.add_argument(
         "--save-video", action="store_true", help="save detection output video"
     )
+    parser.add_argument("--no-label", action="store_true", help="don't show label")
     args = parser.parse_args()
     load_video_and_inference(args)
