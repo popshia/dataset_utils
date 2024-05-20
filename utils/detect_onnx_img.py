@@ -8,14 +8,11 @@ import onnxruntime as ort
 import torch
 from PIL import Image
 
-ONNX_FILE = "./0516.onnx"
-
 ORT_PROVIDERS = (
     ["CUDAExecutionProvider", "CPUExecutionProvider"]
     if torch.cuda.is_available()
     else ["CPUExecutionProvider"]
 )
-SESSION = ort.InferenceSession(ONNX_FILE, providers=ORT_PROVIDERS)
 CLASSES = [
     "H61-300621",
     "H69-300690",
@@ -66,8 +63,11 @@ def letterbox(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("onnx", type=str, help="onnx file")
     parser.add_argument("input", type=str, help="inference img directory")
     args = parser.parse_args()
+    ort_session = ort.InferenceSession(args.onnx, providers=ORT_PROVIDERS)
+
     for img in Path(args.input).resolve().glob("**/*[JP][PN]G"):
         print(img.as_posix())
         input_img = cv2.imread(img.as_posix())
@@ -79,12 +79,12 @@ if __name__ == "__main__":
         image = np.ascontiguousarray(image)
         im = image.astype(np.float32)
         im /= 255
-        outname = [i.name for i in SESSION.get_outputs()]
-        inname = [i.name for i in SESSION.get_inputs()]
+        outname = [i.name for i in ort_session.get_outputs()]
+        inname = [i.name for i in ort_session.get_inputs()]
         inp = {inname[0]: im}
 
         # ONNX inference
-        outputs = SESSION.run(outname, inp)[0]
+        outputs = ort_session.run(outname, inp)[0]
         ori_images = [input_img.copy()]
 
         for i, (batch_id, x0, y0, x1, y1, cls_id, score) in enumerate(outputs):
