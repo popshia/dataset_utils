@@ -10,7 +10,7 @@ def generate_txt(opts):
 
     # train dir
     with open(train_txt, "w") as train_txt:
-        for img in sorted(Path(train_dir).glob("**/*.[jp][pn]g")):
+        for img in sorted(Path(train_dir).glob("**/*.[jJpP][pPnN][gG]")):
             img_path = Path(img).resolve()
             if not opts.aug:
                 if not any(
@@ -22,7 +22,7 @@ def generate_txt(opts):
 
     # val dir
     with open(val_txt, "w") as val_txt:
-        for img in sorted(Path(val_dir).glob("**/*.[jp][pn]g")):
+        for img in sorted(Path(val_dir).glob("**/*.[jJpP][pPnN][gG]")):
             img_path = Path(img).resolve()
             if not opts.aug:
                 if not any(

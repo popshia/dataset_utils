@@ -1,5 +1,6 @@
 import argparse
 import random
+import threading
 from pathlib import Path
 
 import cv2
@@ -86,18 +87,24 @@ def plot_yolo_labels(args):
     classes = open(args.classes_txt).read().strip().split("\n")
     random.seed(42)
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(classes))]
+    thread_list = []
 
     for i, img in enumerate(
-        sorted(Path(args.dataset_dir).glob("*.[jp][pn]g"))
+        sorted(Path(args.dataset_dir).glob("*.[jJpP][pPnN][gG]"))
     ):  # iterate img names
         img_path = Path(img).resolve().as_posix()
         label_path = Path(img).with_suffix(".txt").as_posix()
-        draw_box_on_image(
-            img_path, label_path, classes, colors, "./save_imgs/"
-        )  # draw boxes
-
+        thread_list.append(
+            threading.Thread(
+                target=draw_box_on_image,
+                args=(img_path, label_path, classes, colors, "./save_imgs"),
+            )
+        )
         if i == args.output_count - 1:
             break
+
+    for thread in thread_list:
+        thread.start()
 
 
 if __name__ == "__main__":

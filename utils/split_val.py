@@ -24,7 +24,7 @@ def create_dirs_and_move_files(file_list, dest):
 
 
 def split_train_val(args):
-    all_file_list = sorted(Path(args.dataset_dir).glob("**/*.[jp][pn]g"))
+    all_file_list = sorted(Path(args.dataset_dir).glob("**/*.[jJpP][pPnN][gG]"))
     train_file_count = int(len(all_file_list) * float(args.train_percentage / 100))
     train_file_list = []
     for _ in range(train_file_count):

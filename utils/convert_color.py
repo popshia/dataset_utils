@@ -1,7 +1,7 @@
 import argparse
-import os
 import random
 import shutil
+import threading
 from pathlib import Path
 
 import cv2
@@ -16,6 +16,9 @@ class Image:
         self.label_file = self.abs_path.with_suffix(".txt").as_posix()
         self.ext = img_name.suffix
         self.aug_imgs = []
+        thread = threading.Thread(target=self.convert, args=())
+        # thread.daemon = True
+        thread.start()
 
     def convert_colors(self):
         # brightness
@@ -86,7 +89,6 @@ class Image:
         # print(label_file[:-4] + "_cot.txt")
         # print(label_file[:-4] + "_sat.txt")
         # print(label_file[:-4] + "_ivt.txt")
-        print("-" * os.get_terminal_size().columns)
         shutil.copy(
             label_file,
             label_file[:-4] + "_brt.txt",
@@ -113,9 +115,8 @@ class Image:
 def convert_imgs(opts):
     dataset_dir = opts.dataset_dir
 
-    for img in sorted(Path(dataset_dir).glob("**/*.[jp][pn]g")):
-        org_img = Image(Path(img))
-        org_img.convert()
+    for img in sorted(Path(dataset_dir).glob("**/*.[jJpP][pPnN][gG]")):
+        Image(Path(img))
 
 
 if __name__ == "__main__":

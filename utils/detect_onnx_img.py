@@ -68,7 +68,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     ort_session = ort.InferenceSession(args.onnx, providers=ORT_PROVIDERS)
 
-    for img in Path(args.input).resolve().glob("**/*[JP][PN]G"):
+    for img in Path(args.input).resolve().glob("**/*[jJpP][pPnN][gG]"):
         print(img.as_posix())
         input_img = cv2.imread(img.as_posix())
         input_img = cv2.cvtColor(input_img, cv2.COLOR_BGR2RGB)
