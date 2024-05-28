@@ -132,8 +132,8 @@ def random_perspective(
     R = np.eye(3)
     a = random.uniform(-degrees, degrees)
     # a += random.choice([-180, -90, 0, 90])  # add 90deg rotations to small rotations
-    # s = random.uniform(1 - scale, 1.1 + scale)
-    s = random.uniform(1, 1.1 + scale)
+    s = random.uniform(1 - scale, 1.1 + scale)
+    # s = random.uniform(1, 1.1 + scale)
     # s = 2 ** random.uniform(-scale, scale)
     R[:2] = cv2.getRotationMatrix2D(angle=a, center=(0, 0), scale=s)
 
@@ -308,7 +308,7 @@ def data_augmentation(args, hyp, image_path, i):
     with open(output_txt_name, "w") as txt:
         for label in labels:
             label_list = label.tolist()
-            line = "{} {:6f} {:6f} {:6f} {:6f}\n".format(
+            line = "{:d} {:6f} {:6f} {:6f} {:6f}\n".format(
                 int(label_list[0]),
                 label_list[1],
                 label_list[2],
@@ -339,7 +339,10 @@ if __name__ == "__main__":
     for img in img_list:
         for i in range(args.n):
             thread_list.append(
-                threading.Thread(target=data_augmentation, args=(args, hyps, img, i))
+                threading.Thread(
+                    target=data_augmentation,
+                    args=(args, hyps, img, "aug_ver" + str(i + 1)),
+                )
             )
 
     for thread in thread_list:
