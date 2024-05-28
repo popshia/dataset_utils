@@ -79,7 +79,7 @@ def plot_and_show_results(
             cv2.rectangle(
                 image, box[:2], box[2:], color, thickness=tl, lineType=cv2.LINE_AA
             )
-            # detect_results.append(detection)
+            detect_results.append(detection)
             detect_results.append([label, box])
             # label box
             if not args.no_label:

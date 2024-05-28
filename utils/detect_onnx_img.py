@@ -1,5 +1,6 @@
 import argparse
 import random
+import threading
 from pathlib import Path
 
 import cv2
@@ -13,19 +14,13 @@ ORT_PROVIDERS = (
     if torch.cuda.is_available()
     else ["CPUExecutionProvider"]
 )
-CLASSES = [
-    "H61-300621",
-    "H69-300690",
-    "H69-300641",
-    "H69-400851",
-    "H61-401052",
-    "H69-300590",
-    "H69-300850",
-    "H69-300650",
-]
-COLORS = {
-    name: [random.randint(0, 255) for _ in range(3)] for i, name in enumerate(CLASSES)
-}
+
+
+def get_class_names(classes_txt):
+    with open(Path(classes_txt).resolve(), "r") as classes:
+        cls_names_list = classes.readlines()
+        cls_name_list = [cls_name.strip() for cls_name in cls_names_list]
+        return cls_name_list
 
 
 def letterbox(
@@ -61,62 +56,111 @@ def letterbox(
     return im, r, (dw, dh)
 
 
+def process_img(image):
+    image = image.transpose((2, 0, 1))
+    image = np.expand_dims(image, 0)
+    image = np.ascontiguousarray(image)
+    im = image.astype(np.float32)
+    im /= 255
+    return image, im
+
+
+def inference_with_onnx_session(session, im):
+    outname = [i.name for i in session.get_outputs()]
+    inname = [i.name for i in session.get_inputs()]
+    input = {inname[0]: im}
+    model_outs = session.run(outname, input)[0]
+    return model_outs
+
+
+def detect_img(img, classes_txt, ort_session):
+    print(img.as_posix())
+    input_img = cv2.imread(img.as_posix())
+    input_img = cv2.cvtColor(input_img, cv2.COLOR_BGR2RGB)
+    image = input_img.copy()
+    image, ratio, dwdh = letterbox(image, auto=False)
+    image, im = process_img(image)
+    outputs = inference_with_onnx_session(ort_session, im)
+    ori_images = [input_img.copy()]
+
+    classes = get_class_names(classes_txt)
+    colors = {
+        name: [random.randint(0, 255) for _ in range(3)]
+        for _, name in enumerate(classes)
+    }
+    detection_results = []
+
+    for i, (batch_id, x0, y0, x1, y1, cls_id, score) in enumerate(outputs):
+        image = ori_images[int(batch_id)]
+        box = np.array([x0, y0, x1, y1])
+        box -= np.array(dwdh * 2)
+        box /= ratio
+        box = box.round().astype(np.int32).tolist()
+        cls_id = int(cls_id)
+        score = round(float(score), 3)
+        name = classes[cls_id]
+        color = colors[name]
+        name += " " + str(score)
+        tl = round(0.002 * (image.shape[0] + image.shape[1]) / 2) + 1
+        tf = max(tl - 1, 1)
+        detection = image[box[1] + tl : box[3] - tl, box[0] + tl : box[2] - tl]
+        detection_results.append(detection)
+        cv2.rectangle(
+            image, box[:2], box[2:], color, thickness=tl, lineType=cv2.LINE_AA
+        )
+        c1, c2 = box[:2], box[2:]
+        tf = max(tl - 1, 1)
+        t_size = cv2.getTextSize(name, 0, fontScale=tl / 3, thickness=tf)[0]
+        c2 = (c1[0] + t_size[0], c1[1] - t_size[1] - 3)
+        cv2.rectangle(image, c1, c2, color, -1, cv2.LINE_AA)
+        cv2.putText(
+            image,
+            name,
+            (box[0], box[1] - 2),
+            0,
+            tl / 3,
+            [225, 255, 255],
+            thickness=tf,
+            lineType=cv2.LINE_AA,
+        )
+
+    if not Path("detection_results").is_dir():
+        Path("detection_results").mkdir()
+
+    cv2.imwrite("./detection_results/" + img.name, image)
+    return detection_results
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("onnx", type=str, help="onnx file")
     parser.add_argument("input", type=str, help="inference img directory")
+    parser.add_argument("classes", type=str, help="classes.txt file")
+    parser.add_argument(
+        "--save-boxes", action="store_true", help="save detection_boxes"
+    )
     args = parser.parse_args()
     ort_session = ort.InferenceSession(args.onnx, providers=ORT_PROVIDERS)
+    img_list = sorted(Path(args.input).glob("**/*.[jJpP][pPnN][gG]"))
+    thread_list = []
+    result_boxes = []
 
-    for img in Path(args.input).resolve().glob("**/*[jJpP][pPnN][gG]"):
-        print(img.as_posix())
-        input_img = cv2.imread(img.as_posix())
-        input_img = cv2.cvtColor(input_img, cv2.COLOR_BGR2RGB)
-        image = input_img.copy()
-        image, ratio, dwdh = letterbox(image, auto=False)
-        image = image.transpose((2, 0, 1))
-        image = np.expand_dims(image, 0)
-        image = np.ascontiguousarray(image)
-        im = image.astype(np.float32)
-        im /= 255
-        outname = [i.name for i in ort_session.get_outputs()]
-        inname = [i.name for i in ort_session.get_inputs()]
-        inp = {inname[0]: im}
+    if args.save_boxes:
+        for img in img_list:
+            result_boxes.append(detect_img(img, args.classes, ort_session))
 
-        # ONNX inference
-        outputs = ort_session.run(outname, inp)[0]
-        ori_images = [input_img.copy()]
-
-        for i, (batch_id, x0, y0, x1, y1, cls_id, score) in enumerate(outputs):
-            image = ori_images[int(batch_id)]
-            box = np.array([x0, y0, x1, y1])
-            box -= np.array(dwdh * 2)
-            box /= ratio
-            box = box.round().astype(np.int32).tolist()
-            cls_id = int(cls_id)
-            score = round(float(score), 3)
-            name = CLASSES[cls_id]
-            color = COLORS[name]
-            name += " " + str(score)
-            tl = round(0.002 * (image.shape[0] + image.shape[1]) / 2) + 1
-            tf = max(tl - 1, 1)
-            cv2.rectangle(
-                image, box[:2], box[2:], color, thickness=tl, lineType=cv2.LINE_AA
-            )
-            c1, c2 = box[:2], box[2:]
-            tf = max(tl - 1, 1)
-            t_size = cv2.getTextSize(name, 0, fontScale=tl / 3, thickness=tf)[0]
-            c2 = (c1[0] + t_size[0], c1[1] - t_size[1] - 3)
-            cv2.rectangle(image, c1, c2, color, -1, cv2.LINE_AA)
-            cv2.putText(
-                image,
-                name,
-                (box[0], box[1] - 2),
-                0,
-                tl / 3,
-                [225, 255, 255],
-                thickness=tf,
-                lineType=cv2.LINE_AA,
+        for i, result in enumerate(result_boxes):
+            for j, box in enumerate(result):
+                cv2.imwrite(
+                    "./detection_results/result_{:d}_{:d}.jpg".format(i, j), box
+                )
+    else:
+        for img in img_list:
+            thread_list.append(
+                threading.Thread(
+                    target=detect_img, args=(img, args.classes, ort_session)
+                )
             )
 
-        cv2.imwrite("./demo_imgs/" + img.name, image)
+        for thread in thread_list:
+            thread.start()

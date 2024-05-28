@@ -1,9 +1,9 @@
 from utils.convert_color import convert_imgs
 from utils.count_object import count_dataset_objects
 from utils.detect_onnx import load_video_and_inference
-from utils.draw_yolo_boxes import plot_yolo_labels
 from utils.generate_txt import generate_txt
 from utils.label_format_converter import convert_label_format
+from utils.plot_yolo_labels import plot_yolo_labels
 from utils.split_val import split_train_val
 
 
