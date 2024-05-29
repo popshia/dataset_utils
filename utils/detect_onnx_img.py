@@ -147,12 +147,13 @@ if __name__ == "__main__":
 
     if args.save_boxes:
         for img in img_list:
-            result_boxes.append(detect_img(img, args.classes, ort_session))
+            result_boxes.append([img, detect_img(img, args.classes, ort_session)])
 
         for i, result in enumerate(result_boxes):
-            for j, box in enumerate(result):
+            for j, box in enumerate(result[1]):
                 cv2.imwrite(
-                    "./detection_results/result_{:d}_{:d}.jpg".format(i, j), box
+                    "./detection_results/{}_{:d}_{:d}.jpg".format(result[0].stem, i, j),
+                    box,
                 )
     else:
         for img in img_list:
