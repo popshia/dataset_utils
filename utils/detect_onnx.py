@@ -169,7 +169,7 @@ def load_video_and_inference(args):
             )
 
         with alive_bar(frame_count) as bar:
-            for i in range(frame_count):
+            while 1:
                 ret, frame = cap.read()
 
                 if not ret:

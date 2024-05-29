@@ -127,7 +127,9 @@ def detect_img(img, classes_txt, ort_session):
     if not Path("detection_results").is_dir():
         Path("detection_results").mkdir()
 
-    cv2.imwrite("./detection_results/" + img.name, image)
+    cv2.imwrite(
+        "./detection_results/" + img.name, cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    )
     return detection_results
 
 
@@ -157,11 +159,12 @@ if __name__ == "__main__":
                 )
     else:
         for img in img_list:
-            thread_list.append(
-                threading.Thread(
-                    target=detect_img, args=(img, args.classes, ort_session)
-                )
-            )
-
-        for thread in thread_list:
-            thread.start()
+            detect_img(img, args.classes, ort_session)
+        #     thread_list.append(
+        #         threading.Thread(
+        #             target=detect_img, args=(img, args.classes, ort_session)
+        #         )
+        #     )
+        #
+        # for thread in thread_list:
+        #     thread.start()
