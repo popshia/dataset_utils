@@ -103,7 +103,10 @@ def detect_img(img, classes_txt, ort_session):
         name += " " + str(score)
         tl = round(0.002 * (image.shape[0] + image.shape[1]) / 2) + 1
         tf = max(tl - 1, 1)
-        detection = image[box[1] + tl : box[3] - tl, box[0] + tl : box[2] - tl]
+        detection = cv2.cvtColor(
+            image[box[1] + tl : box[3] - tl, box[0] + tl : box[2] - tl],
+            cv2.COLOR_RGB2BGR,
+        )
         detection_results.append(detection)
         cv2.rectangle(
             image, box[:2], box[2:], color, thickness=tl, lineType=cv2.LINE_AA
@@ -151,10 +154,10 @@ if __name__ == "__main__":
         for img in img_list:
             result_boxes.append([img, detect_img(img, args.classes, ort_session)])
 
-        for i, result in enumerate(result_boxes):
-            for j, box in enumerate(result[1]):
+        for result in result_boxes:
+            for i, box in enumerate(result[1]):
                 cv2.imwrite(
-                    "./detection_results/{}_{:d}_{:d}.jpg".format(result[0].stem, i, j),
+                    "./detection_results/{}_{:d}.jpg".format(result[0].stem, i),
                     box,
                 )
     else:

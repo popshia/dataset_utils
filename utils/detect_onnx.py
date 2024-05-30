@@ -99,7 +99,7 @@ def plot_and_show_results(
                     lineType=cv2.LINE_AA,
                 )
                 # print(label, box)
-    print(detect_results)
+    # print(detect_results)
 
     resized_result = cv2.resize(
         cv2.cvtColor(org_imgs[0], cv2.COLOR_RGB2BGR), (1080, 720)
@@ -188,7 +188,7 @@ def load_video_and_inference(args):
                     org_imgs,
                     dwdh,
                     ratio,
-                    args.conf_thr,
+                    args.conf,
                     classes,
                     colors,
                     args,
@@ -286,12 +286,14 @@ during inference, press "q" to close cv2 window or skip to next data.""",
     parser.add_argument(
         "input", type=str, help="inference rtsp url, single file or video directory"
     )
-    parser.add_argument("img_size", type=int, help="img size used in training phase")
-    parser.add_argument("conf_thr", type=float, help="conf threshold")
     parser.add_argument("classes_txt", type=str, help="'classes.txt' file path")
     parser.add_argument(
         "--save-video", action="store_true", help="save detection output video"
     )
+    parser.add_argument(
+        "--img_size", type=int, default=640, help="img size used in training phase"
+    )
+    parser.add_argument("--conf", type=float, default=0.5, help="conf threshold")
     parser.add_argument("--no-label", action="store_true", help="don't show label")
     args = parser.parse_args()
     load_video_and_inference(args)
