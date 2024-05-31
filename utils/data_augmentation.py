@@ -132,8 +132,8 @@ def random_perspective(
     R = np.eye(3)
     a = random.uniform(-degrees, degrees)
     # a += random.choice([-180, -90, 0, 90])  # add 90deg rotations to small rotations
-    s = random.uniform(1 - scale, 1.1 + scale)
-    # s = random.uniform(1, 1.1 + scale)
+    # s = random.uniform(1 - scale, 1.1 + scale)
+    s = random.uniform(1, 1.1 + scale)
     # s = 2 ** random.uniform(-scale, scale)
     R[:2] = cv2.getRotationMatrix2D(angle=a, center=(0, 0), scale=s)
 
@@ -325,7 +325,10 @@ if __name__ == "__main__":
     parser.add_argument("hyp", help="hyperparameter yaml file.")
     parser.add_argument("dataset", help="dataset directory.")
     parser.add_argument(
-        "--n", type=int, default=3, help="how many new image to create per image."
+        "--new-image",
+        type=int,
+        default=3,
+        help="how many new image to create per image.",
     )
     parser.add_argument("--img-size", default=640, help="resize image size.")
     args = parser.parse_args()
@@ -337,7 +340,7 @@ if __name__ == "__main__":
     img_list = sorted(Path(args.dataset).glob("**/*.[jJpP][pPnN][gG]"))
 
     for img in img_list:
-        for i in range(args.n):
+        for i in range(args.new_image):
             thread_list.append(
                 threading.Thread(
                     target=data_augmentation,
