@@ -229,7 +229,7 @@ def data_augmentation(args, hyp, image_path, i):
     img, (h0, w0), (h, w) = load_image(args, image_path.as_posix())
 
     # Letterbox
-    shape = 640  # final letterboxed shape
+    shape = args.img_size  # final letterboxed shape
     img, ratio, pad = letterbox(img, shape, auto=False, scaleup=True)
 
     labels = load_label(Path(image_path).with_suffix(".txt"))
@@ -330,7 +330,7 @@ if __name__ == "__main__":
         default=3,
         help="how many new image to create per image.",
     )
-    parser.add_argument("--img-size", default=640, help="resize image size.")
+    parser.add_argument("--img-size", type=int, default=640, help="resize image size.")
     args = parser.parse_args()
     hyps = load_hyp(args.hyp)
 
