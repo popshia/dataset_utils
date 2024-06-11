@@ -175,5 +175,6 @@ pyrightconfig.json
 
 # test data
 test_data/
+runs/
 
 # End of https://www.toptal.com/developers/gitignore/api/python
