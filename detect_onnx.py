@@ -1,6 +1,5 @@
 # Inference using ONNX model
 import argparse
-import copy
 import random
 import time
 from pathlib import Path
@@ -125,7 +124,10 @@ class LoadImages:  # for inference
         self.nframes = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     def __len__(self):
-        return self.file_count  # number of files
+        if self.video_flag:
+            return int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        else:
+            return self.file_count  # number of files
 
 
 class LoadStreams:  # multiple IP or RTSP cameras
@@ -210,10 +212,10 @@ def inference_with_onnx_session(session, im):
     return model_outs
 
 
-def plot_one_box(x1, y1, x2, y2, img, ratio, dwdh, color=None, label=None):
+def plot_one_box(x, img, ratio, dwdh, label, color):
     tl = round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
     color = color or [random.randint(0, 255) for _ in range(3)]
-    box = np.array([x1, y1, x2, y2])
+    box = np.array([x[0], x[1], x[2], x[3]])
     box -= np.array(dwdh * 2)
     box /= ratio
     box = box.round().astype(np.int32).tolist()
@@ -270,9 +272,14 @@ def letter_box(
 
 
 def load_video_and_inference(args):
-    session = ort.InferenceSession(args.onnx, providers=ORT_PROVIDERS)
-    names = get_class_names(args.classes_txt)
-    colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
+    session_1 = ort.InferenceSession(args.onnx, providers=ORT_PROVIDERS)
+    names_1 = get_class_names(args.classes_txt)
+    colors_1 = [[random.randint(0, 255) for _ in range(3)] for _ in names_1]
+
+    if args.second_onnx:
+        session_2 = ort.InferenceSession(args.second_onnx, providers=ORT_PROVIDERS)
+        names_2 = get_class_names(args.second_classes_txt)
+        colors_2 = [[random.randint(0, 255) for _ in range(3)] for _ in names_2]
 
     is_webcam = args.source.isnumeric() or args.source.lower().startswith(
         ("rtsp://", "rtmp://", "http://", "https://")
@@ -293,56 +300,71 @@ def load_video_and_inference(args):
     t0 = time.time()
     with alive_bar(len(dataset)) as bar:
         for path, img, im0s, vid_cap, ratio, dwdh in dataset:
+            model_predictions = []
             t1 = time_synchronized()
-            pred = inference_with_onnx_session(session, img)
+
+            pred = inference_with_onnx_session(session_1, img)
+            model_predictions.append(pred)
+
+            if args.second_onnx:
+                pred_2 = inference_with_onnx_session(session_2, img)
+                model_predictions.append(pred_2)
+
             t2 = time_synchronized()
 
-            # Process detections
-            for i, det in enumerate(pred):  # detections per image
-                if is_webcam:  # batch_size >= 1
-                    p, s, im0, _ = str(path), "", im0s, dataset.count
-                else:
-                    p, s, im0, _ = path, "", im0s, getattr(dataset, "frame", 0)
+            if is_webcam:  # batch_size >= 1
+                p, s, im0, _ = str(path), "", im0s, dataset.count
+            else:
+                p, s, im0, _ = path, "", im0s, getattr(dataset, "frame", 0)
 
-                p = Path(p)  # to Path
-                save_path = str(save_dir / p.name)  # img.jpg
-                x1, y1, x2, y2, cls, conf = [det[i] for i in range(1, 7)]
-                if len(det):
+            p = Path(p)  # to Path
+            save_path = str(save_dir / p.name)  # img.jpg
+
+            # Process detections
+            for i, pred in enumerate(model_predictions):
+                names, colors, conf_thres = (
+                    (names_1, colors_1, args.conf_thres)
+                    if i == 0
+                    else (names_2, colors_2, args.second_conf_thres)
+                )
+
+                if len(pred):
                     # Print results
                     for c in np.unique(pred[:, -2]):
-                        n = (pred[:, -2] == c).sum()  # detections per class
+                        n = np.logical_and(
+                            pred[:, -2] == c, pred[:, -1] > conf_thres
+                        ).sum()  # detections per class
                         s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
-                    # Plot box
-                    if not args.no_label:
-                        label = f"{names[int(cls)]} {conf:.2f}"
-                    else:
-                        label = None
+                    for _, *xyxy, cls, conf in pred:  # detections per image
+                        if conf > conf_thres:
+                            # Plot box
+                            if args.no_label:
+                                label = None
+                            else:
+                                label = f"{names[int(cls)]} {conf:.2f}"
 
-                    plot_one_box(
-                        x1,
-                        y1,
-                        x2,
-                        y2,
-                        im0,
-                        ratio,
-                        dwdh,
-                        label=label,
-                        color=colors[int(cls)],
-                    )
+                            plot_one_box(
+                                xyxy, im0, ratio, dwdh, label, colors[int(cls)]
+                            )
 
+            im0 = cv2.cvtColor(im0.copy(), cv2.COLOR_BGR2RGB)
             print(f"{s}({(1E3 * (t2 - t1)):.1f}ms) Inference, {int(1/(t2-t1))} fps.")
 
             # Stream results
             if args.view_img and (dataset.mode == "video" or dataset.mode == "stream"):
-                resized_result = cv2.resize(im0, (1080, 720))
-                cv2.imshow(str(p), resized_result)
+                im0 = (
+                    cv2.resize(im0, (1280, 720))
+                    if im0.shape[1] > im0.shape[2]
+                    else cv2.resize(im0, (720, 1280))
+                )
+                cv2.imshow("result", im0)
                 if cv2.waitKey(1) == ord("q"):
                     exit(0)
 
             # Save results (image with detections)
             if dataset.mode == "image":
-                cv2.imwrite(save_path, cv2.cvtColor(im0, cv2.COLOR_RGB2BGR))
+                cv2.imwrite(save_path, im0)
                 print(f" The image with the result is saved in: {save_path}")
             else:  # 'video' or 'stream'
                 if vid_path != save_path:  # new video
@@ -381,7 +403,11 @@ during inference, press "q" to close cv2 window or skip to next data.""",
     parser.add_argument("source", type=str)
     parser.add_argument("classes_txt", type=str, help="'classes.txt' file path")
     parser.add_argument("--second-onnx", type=str, help="second model onnx file")
+    parser.add_argument("--second-classes-txt", type=str, help="second 'classes.txt'")
     parser.add_argument("--conf-thres", type=float, default=0.5, help="conf threshold")
+    parser.add_argument(
+        "--second-conf-thres", type=float, default=0.5, help="second conf"
+    )
     parser.add_argument("--img-size", type=int, default=640, help="model image size")
     parser.add_argument("--project", default="runs/detect", help="save directory")
     parser.add_argument("--name", default="exp", help="current run name")
@@ -391,7 +417,3 @@ during inference, press "q" to close cv2 window or skip to next data.""",
     parser.add_argument("--view-img", action="store_true", help="view result realtime")
     args = parser.parse_args()
     load_video_and_inference(args)
-    if args.second_onnx:
-        second_args = copy.deepcopy(args)
-        second_args.onnx = second_args.second_onnx
-        load_video_and_inference(args)

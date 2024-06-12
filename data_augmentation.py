@@ -291,18 +291,13 @@ def data_augmentation(args, hyp, image_path, i):
     # ax[1].imshow(img[:, :, ::-1])  # warped
     # plt.show()
 
-    if not Path("augmented_img_and_labels").is_dir():
-        Path("augmented_img_and_labels").mkdir(parents=True, exist_ok=True)
+    if not Path("runs/augmentation").is_dir():
+        Path("runs/augmentation").mkdir(parents=True, exist_ok=True)
 
     output_img_name = (
-        "augmented_img_and_labels/"
-        + image_path.stem
-        + "_{}".format(str(i))
-        + image_path.suffix
+        "runs/augmentation" + image_path.stem + "_{}".format(str(i)) + image_path.suffix
     )
-    output_txt_name = (
-        "augmented_img_and_labels/" + image_path.stem + "_{}.txt".format(str(i))
-    )
+    output_txt_name = "runs/augmentation" + image_path.stem + "_{}.txt".format(str(i))
     print(output_img_name)
     # print(output_txt_name)
 
