@@ -328,9 +328,12 @@ def data_augmentation(args, hyp, image_path, i):
         Path("runs/augmentation").mkdir(parents=True, exist_ok=True)
 
     output_img_name = (
-        "runs/augmentation" + image_path.stem + "_{}".format(str(i)) + image_path.suffix
+        "runs/augmentation/"
+        + image_path.stem
+        + "_{}".format(str(i))
+        + image_path.suffix
     )
-    output_txt_name = "runs/augmentation" + image_path.stem + "_{}.txt".format(str(i))
+    output_txt_name = "runs/augmentation/" + image_path.stem + "_{}.txt".format(str(i))
     print(output_img_name)
     # print(output_txt_name)
 

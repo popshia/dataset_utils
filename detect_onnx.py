@@ -270,6 +270,16 @@ def load_video_and_inference(args):
                                 f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
                             )
 
+                    if args.save_boxes:
+                        for i, (_, *xyxy, _, _) in enumerate(pred):  # detection boxes
+                            xyxy -= np.array(dwdh * 2)
+                            xyxy /= ratio
+                            xyxy = xyxy.round().astype(np.int32).tolist()
+                            cv2.imwrite(
+                                save_path[:-4] + f"_box_{i+1}" + save_path[-4:],
+                                im0[xyxy[1] : xyxy[3], xyxy[0] : xyxy[2]].copy(),
+                            )
+
                     for _, *xyxy, cls, conf in pred:  # detections per image
                         # if conf > conf_thres and int(cls) == 0:
                         if conf > conf_thres:

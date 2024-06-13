@@ -28,7 +28,9 @@ def plot_one_box(x, img, ratio, dwdh, label, color):
     box -= np.array(dwdh * 2)
     box /= ratio
     box = box.round().astype(np.int32).tolist()
+    # plot bounding box
     cv2.rectangle(img, box[:2], box[2:], color, thickness=tl, lineType=cv2.LINE_AA)
+    # plot label
     if label:
         c1, c2 = box[:2], box[2:]
         tf = max(tl - 1, 1)  # font thickness
