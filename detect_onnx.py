@@ -94,7 +94,7 @@ class LoadImages:  # for inference
     def __next__(self):
         if self.count == self.file_count:
             raise StopIteration
-        path = Path(self.files[self.count]).name
+        path = self.files[self.count]
 
         if self.video_flag[self.count]:
             # Read video
@@ -106,7 +106,7 @@ class LoadImages:  # for inference
                 if self.count == self.file_count:  # last video
                     raise StopIteration
                 else:
-                    path = Path(self.files[self.count]).name
+                    path = self.files[self.count]
                     self.new_video(path)
                     ret, frame = self.cap.read()
 
@@ -124,7 +124,7 @@ class LoadImages:  # for inference
             # print(f'image {self.count}/{self.nf} {path}: ', end='')
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        image, ratio, dwdh = letter_box(frame, auto=False)
+        image, ratio, dwdh = letter_box(frame, self.img_size, auto=False)
         image, im = proprocess_img(image)
 
         return path, im, frame, self.cap, ratio, dwdh
@@ -135,7 +135,7 @@ class LoadImages:  # for inference
         self.nframes = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     def __len__(self):
-        if self.video_flag:
+        if True in self.video_flag:
             return int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         else:
             return self.file_count  # number of files
@@ -184,13 +184,14 @@ class LoadStreams:  # multiple IP or RTSP cameras
             raise StopIteration
 
         # Letterbox
-        img, ratio, dwdh = letter_box(
-            cv2.cvtColor(img0, cv2.COLOR_BGR2RGB),
+        img0 = cv2.cvtColor(img0, cv2.COLOR_BGR2RGB)
+        image, ratio, dwdh = letter_box(
+            img0,
             self.img_size,
             auto=False,
             stride=self.stride,
         )
-        _, im = proprocess_img(img)
+        image, im = proprocess_img(image)
 
         return "".join(str(c) for c in self.sources), im, img0, None, ratio, dwdh
 
@@ -226,6 +227,8 @@ def load_video_and_inference(args):
 
     t0 = time.time()
     with alive_bar(len(dataset)) as bar:
+        # only_human_duration = 0
+
         for path, img, im0s, vid_cap, ratio, dwdh in dataset:
             model_predictions = []
             t1 = time_synchronized()
@@ -246,6 +249,7 @@ def load_video_and_inference(args):
 
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # img.jpg
+            im0 = cv2.cvtColor(im0, cv2.COLOR_RGB2BGR)
 
             # Process detections
             for i, pred in enumerate(model_predictions):
@@ -267,6 +271,7 @@ def load_video_and_inference(args):
                             )
 
                     for _, *xyxy, cls, conf in pred:  # detections per image
+                        # if conf > conf_thres and int(cls) == 0:
                         if conf > conf_thres:
                             # Plot box
                             if args.no_label:
@@ -278,17 +283,86 @@ def load_video_and_inference(args):
                                 xyxy, im0, ratio, dwdh, label, colors[int(cls)]
                             )
 
-            im0 = cv2.cvtColor(im0.copy(), cv2.COLOR_BGR2RGB)
-            print(f"{s}({(1E3 * (t2 - t1)):.1f}ms) Inference, {int(1/(t2-t1))} fps.")
+            result_str = (
+                f"{s}({(1E3 * (t2 - t1)):.1f}ms) Inference, {int(1/(t2-t1))} fps."
+            )
+            print(result_str)
+
+            # check human and buckle
+            # if "person" in result_str and "buckle_fastened" not in result_str:
+            #     only_human_duration += 1
+            #     if only_human_duration >= 20:
+            #         cv2.putText(
+            #             im0,
+            #             "ALARM!",
+            #             (40, 95),
+            #             0,
+            #             3,
+            #             [0, 0, 255],
+            #             cv2.LINE_AA,
+            #         )
+            #         im0 = cv2.copyMakeBorder(
+            #             im0,
+            #             10,
+            #             10,
+            #             10,
+            #             10,
+            #             cv2.BORDER_CONSTANT,
+            #             None,
+            #             [0, 0, 255],
+            #         )
+            #     else:
+            #         im0 = cv2.copyMakeBorder(
+            #             im0,
+            #             10,
+            #             10,
+            #             10,
+            #             10,
+            #             cv2.BORDER_CONSTANT,
+            #             None,
+            #             [255, 0, 0],
+            #         )
+            # elif "person" in result_str and "buckle_fastened" in result_str:
+            #     cv2.putText(
+            #         im0,
+            #         "APPROVE!",
+            #         (40, 95),
+            #         0,
+            #         3,
+            #         [0, 255, 0],
+            #         cv2.LINE_AA,
+            #     )
+            #     im0 = cv2.copyMakeBorder(
+            #         im0,
+            #         10,
+            #         10,
+            #         10,
+            #         10,
+            #         cv2.BORDER_CONSTANT,
+            #         None,
+            #         [0, 255, 0],
+            #     )
+            #     only_human_duration = 0
+            # else:
+            #     im0 = cv2.copyMakeBorder(
+            #         im0,
+            #         10,
+            #         10,
+            #         10,
+            #         10,
+            #         cv2.BORDER_CONSTANT,
+            #         None,
+            #         [255, 0, 0],
+            #     )
 
             # Stream results
             if args.view_img and (dataset.mode == "video" or dataset.mode == "stream"):
-                im0 = (
+                img_show = (
                     cv2.resize(im0, (1280, 720))
                     if im0.shape[1] > im0.shape[2]
                     else cv2.resize(im0, (720, 1280))
                 )
-                cv2.imshow("result", im0)
+                cv2.imshow("result", img_show)
                 if cv2.waitKey(1) == ord("q"):
                     exit(0)
 
@@ -311,7 +385,7 @@ def load_video_and_inference(args):
                     vid_writer = cv2.VideoWriter(
                         save_path, cv2.VideoWriter.fourcc(*"mp4v"), fps, (w, h)
                     )
-                vid_writer.write(im0)
+                vid_writer.write(cv2.resize(im0, (w, h)))
             bar()
 
         print(f"Done. ({time.time() - t0:.3f}s)")
