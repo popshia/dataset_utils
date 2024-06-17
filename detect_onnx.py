@@ -22,6 +22,7 @@ from utils.general import (
     increment_path,
     letter_box,
     time_synchronized,
+    xyxy2xywh,
 )
 
 ORT_PROVIDERS = (
@@ -216,7 +217,9 @@ def load_video_and_inference(args):
     save_dir = Path(
         increment_path(Path(args.project) / args.name, exist_ok=args.exist_ok)
     )  # increment run
-    save_dir.mkdir(parents=True, exist_ok=True)
+    (save_dir / "labels" if args.save_txt else save_dir).mkdir(
+        parents=True, exist_ok=True
+    )  # make dir
     vid_path, vid_writer = None, None
 
     # Set Dataloader
@@ -243,13 +246,17 @@ def load_video_and_inference(args):
             t2 = time_synchronized()
 
             if is_webcam:  # batch_size >= 1
-                p, s, im0, _ = str(path), "", im0s, dataset.count
+                p, s, im0, frame = str(path), "", im0s, dataset.count
             else:
-                p, s, im0, _ = path, "", im0s, getattr(dataset, "frame", 0)
+                p, s, im0, frame = path, "", im0s, getattr(dataset, "frame", 0)
 
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # img.jpg
+            txt_path = str(save_dir / "labels" / p.stem) + (
+                "" if dataset.mode == "image" else f"_{frame}"
+            )  # img.txt
             im0 = cv2.cvtColor(im0, cv2.COLOR_RGB2BGR)
+            gn = np.array(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
 
             # Process detections
             for i, pred in enumerate(model_predictions):
@@ -292,6 +299,20 @@ def load_video_and_inference(args):
                             plot_one_box(
                                 xyxy, im0, ratio, dwdh, label, colors[int(cls)]
                             )
+
+                            if args.save_txt:
+                                xyxy -= np.array(dwdh * 2)
+                                xyxy /= ratio
+                                xyxy = xyxy.round().astype(np.int32).tolist()
+
+                                xywh = xyxy2xywh(xyxy / gn)
+                                line = (
+                                    (cls, *xywh, conf)
+                                    if args.save_conf
+                                    else (cls, *xywh)
+                                )  # label format
+                                with open(txt_path + ".txt", "a") as f:
+                                    f.write(("%g " * len(line)).rstrip() % line + "\n")
 
             result_str = (
                 f"{s}({(1E3 * (t2 - t1)):.1f}ms) Inference, {int(1/(t2-t1))} fps."
@@ -427,6 +448,8 @@ during inference, press "q" to close cv2 window or skip to next data.""",
     parser.add_argument("--name", default="exp", help="current run name")
     parser.add_argument("--no-label", action="store_true", help="don't show label flag")
     parser.add_argument("--save-boxes", action="store_true", help="save boxes flag")
+    parser.add_argument("--save-txt", action="store_true", help="save results to *.txt")
+    parser.add_argument("--save-conf", action="store_true", help="save confidences txt")
     parser.add_argument("--exist-ok", action="store_true", help="do not increment flag")
     parser.add_argument("--view-img", action="store_true", help="view result realtime")
     args = parser.parse_args()
