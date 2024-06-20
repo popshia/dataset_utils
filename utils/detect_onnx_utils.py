@@ -21,13 +21,9 @@ def inference_with_onnx_session(session, im):
     return model_outs
 
 
-def plot_one_box(x, img, ratio, dwdh, label, color):
+def plot_one_box(box, img, label, color):
     tl = round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
     color = color or [random.randint(0, 255) for _ in range(3)]
-    box = np.array([x[0], x[1], x[2], x[3]])
-    box -= np.array(dwdh * 2)
-    box /= ratio
-    box = box.round().astype(np.int32).tolist()
     # plot bounding box
     cv2.rectangle(img, box[:2], box[2:], color, thickness=tl, lineType=cv2.LINE_AA)
     # plot label
@@ -47,3 +43,28 @@ def plot_one_box(x, img, ratio, dwdh, label, color):
             thickness=tf,
             lineType=cv2.LINE_AA,
         )
+
+
+def plot_alarm_message(org, img, text, color):
+    x, y = org
+    t_size = cv2.getTextSize(text, 0, fontScale=3, thickness=3)[0]
+    t_w, t_h = t_size
+    # sum
+    cv2.rectangle(
+        img,
+        (x - 5, y - 5),
+        (x + t_w + 5, y + t_h + 5),
+        color,
+        -1,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        img,
+        text,
+        (x, y + t_h),
+        0,
+        3,
+        [255, 255, 255],
+        thickness=3,
+        lineType=cv2.LINE_AA,
+    )
