@@ -432,30 +432,34 @@ if __name__ == "__main__":
         prog="onnx_inference.py",
         description="""
 Export .pt weight file with command below:
-> python export.py --weights ./{YOUR_PT_FILE}.pt --grid --end2end --simplify --topk-all 100 --iou-thres 0.65 --conf-thres 0.35 --img-size 640 640 --max-wh 640
+
+> python export.py --weights ./{YOUR_PT_FILE}.pt --grid --end2end --simplify --topk-all 100 \\
+  --iou-thres 0.65 --conf-thres 0.35 --img-size {img_size} {img_size} --max-wh {img_size}
 
 Inference data with yolov7 exported onnx model file.
-runs automatically and output frame count and model, bbox infos to stout,
-during inference, press "q" to close cv2 window or skip to next data.""",
+runs automatically and output frame count and result to stdout,
+during inference, press "q" to close result window or skip to next data.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("onnx", type=str)
     parser.add_argument("source", type=str)
-    parser.add_argument("classes_txt", type=str, help="'classes.txt' file path")
-    parser.add_argument("--second-onnx", type=str, help="second model onnx file")
-    parser.add_argument("--second-classes-txt", type=str, help="second 'classes.txt'")
-    parser.add_argument("--conf-thres", type=float, default=0.5, help="conf threshold")
-    parser.add_argument(
-        "--second-conf-thres", type=float, default=0.5, help="second conf"
-    )
+    parser.add_argument("classes_txt", type=str)
+    parser.add_argument("--conf-thres", type=float, default=0.5)
+    parser.add_argument("--second-onnx", type=str)
+    parser.add_argument("--second-classes-txt", type=str)
+    parser.add_argument("--second-conf-thres", type=float, default=0.5)
     parser.add_argument("--img-size", type=int, default=640, help="model image size")
     parser.add_argument("--project", default="runs/detect", help="save directory")
     parser.add_argument("--name", default="exp", help="current run name")
-    parser.add_argument("--no-label", action="store_true", help="don't show label flag")
-    parser.add_argument("--save-boxes", action="store_true", help="save boxes flag")
+    parser.add_argument("--no-label", action="store_true", help="don't show label")
+    parser.add_argument("--save-boxes", action="store_true", help="save detected boxes")
     parser.add_argument("--save-txt", action="store_true", help="save results to *.txt")
-    parser.add_argument("--save-conf", action="store_true", help="save confidences txt")
-    parser.add_argument("--exist-ok", action="store_true", help="do not increment flag")
-    parser.add_argument("--view-img", action="store_true", help="view result realtime")
+    parser.add_argument(
+        "--save-conf", action="store_true", help="save confidence to *.txt"
+    )
+    parser.add_argument(
+        "--exist-ok", action="store_true", help="do not increment directory"
+    )
+    parser.add_argument("--view-img", action="store_true", help="view result")
     args = parser.parse_args()
     load_video_and_inference(args)
