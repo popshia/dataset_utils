@@ -30,13 +30,13 @@ def plot_one_box(x, image, color=None, label=None, line_thickness=None):
         )
 
 
-def draw_box_on_image(img_path, label_path, classes, colors, img_save_dir):
+def plot_box_on_image(img_path, label_path, classes, colors, img_save_dir):
     save_img_path = Path(img_save_dir) / Path(img_path).parts[-1]
 
     label = open(label_path) if Path(label_path).exists() else []
     image = cv2.imread(img_path)
     try:
-        height, width, channels = image.shape
+        height, width, _ = image.shape
     except:
         print("no shape info.")
         return 0
@@ -88,6 +88,10 @@ def plot_yolo_labels(args):
     random.seed(42)
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(classes))]
     thread_list = []
+    save_dir = Path(
+        Path(args.project) / args.name, exist_ok=args.exist_ok
+    )  # increment run
+    save_dir.mkdir(parents=True, exist_ok=True)
 
     for i, img in enumerate(
         sorted(Path(args.dataset_dir).glob("*.[jJpP][pPnN][gG]"))
@@ -96,8 +100,8 @@ def plot_yolo_labels(args):
         label_path = Path(img).with_suffix(".txt").as_posix()
         thread_list.append(
             threading.Thread(
-                target=draw_box_on_image,
-                args=(img_path, label_path, classes, colors, "./runs/plot"),
+                target=plot_box_on_image,
+                args=(img_path, label_path, classes, colors, save_dir.as_posix()),
             )
         )
         if i == args.output_count - 1:
@@ -112,5 +116,7 @@ if __name__ == "__main__":
     parser.add_argument("dataset_dir")
     parser.add_argument("classes_txt")
     parser.add_argument("output_count", type=int)
+    parser.add_argument("--project", default="runs/plot", help="save directory")
+    parser.add_argument("--name", default="exp", help="current run name")
     args = parser.parse_args()
     plot_yolo_labels(args)
