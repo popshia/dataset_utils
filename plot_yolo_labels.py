@@ -118,5 +118,6 @@ if __name__ == "__main__":
     parser.add_argument("output_count", type=int)
     parser.add_argument("--project", default="runs/plot", help="save directory")
     parser.add_argument("--name", default="exp", help="current run name")
+    parser.add_argument("--exist-ok", action="store_true")
     args = parser.parse_args()
     plot_yolo_labels(args)
