@@ -1,5 +1,4 @@
 import argparse
-import pprint
 from pathlib import Path
 
 import cv2
@@ -8,7 +7,6 @@ import imgaug.augmenters as iaa
 import numpy as np
 import yaml
 from alive_progress import alive_bar
-from alive_progress.styles.internal import THEMES
 from imgaug.augmentables.batches import UnnormalizedBatch
 from imgaug.augmentables.bbs import BoundingBoxesOnImage
 
@@ -173,7 +171,6 @@ def aug_img(dataset, seq, new_image_count):
         for batch_num, batch in enumerate(aug_batch):
             auged_batch = seq.augment_batches(batch, background=True)
             for ver_num, aug in enumerate(auged_batch):
-                # pprint.pprint(vars(aug)["data"])
                 for i, image in enumerate(aug.images_aug):
                     bbs = aug.bounding_boxes_aug[i]
                     path = aug.data[i]
