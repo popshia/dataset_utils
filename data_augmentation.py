@@ -1,4 +1,7 @@
 import argparse
+import os
+import pprint
+import time
 from pathlib import Path
 
 import cv2
@@ -7,7 +10,8 @@ import imgaug.augmenters as iaa
 import numpy as np
 import yaml
 from alive_progress import alive_bar
-from imgaug.augmentables.batches import UnnormalizedBatch
+from imgaug import multicore
+from imgaug.augmentables.batches import Batch, UnnormalizedBatch
 from imgaug.augmentables.bbs import BoundingBoxesOnImage
 
 from utils.data_augmentation_utils import xywh2xyxy
@@ -25,6 +29,9 @@ def load_label(path):
 def load_hyp(hyp):
     with open(hyp) as input:
         hyps = yaml.load(input, Loader=yaml.SafeLoader)  # load hyps
+
+    pprint.pprint(", ".join(f"{k}={v}" for k, v in hyps.items()))
+    print("-" * os.get_terminal_size().columns)
 
     return hyps
 
@@ -73,9 +80,13 @@ def setup_augseq(hyp):
                 shear=(-hyp["shear"], hyp["shear"]),
             ),
             # hsv
-            iaa.MultiplyBrightness((1 - hyp["hsv_v"], 1 + hyp["hsv_v"])),
-            iaa.MultiplyHue((1 - hyp["hsv_h"], 1 + hyp["hsv_h"])),
-            iaa.MultiplySaturation((1 - hyp["hsv_s"], 1 + hyp["hsv_s"])),
+            sometimes(
+                [
+                    iaa.MultiplyBrightness((1 - hyp["hsv_v"], 1 + hyp["hsv_v"])),
+                    iaa.MultiplyHue((1 - hyp["hsv_h"], 1 + hyp["hsv_h"])),
+                    iaa.MultiplySaturation((1 - hyp["hsv_s"], 1 + hyp["hsv_s"])),
+                ]
+            ),
             # contrast
             # iaa.GammaContrast((0.5, 2.0)),
             # dropout
@@ -110,6 +121,11 @@ def split_batches(list, batch_size):
         yield list[i : i + batch_size]
 
 
+def create_generator(list):
+    for list_entry in list:
+        yield list_entry
+
+
 def save_aug_img_and_label(aug_img, aug_labels, path, batch, ver):
     # create dir
     if not Path("runs/augmentation").is_dir():
@@ -136,7 +152,7 @@ def save_aug_img_and_label(aug_img, aug_labels, path, batch, ver):
 
 def aug_img(dataset, seq, new_image_count):
     # set batch size
-    number_of_batch = 16
+    number_of_batch = 200
 
     # get file list
     image_list = sorted(Path(dataset).glob("**/*.[jJpP][pPnN][gG]"))
@@ -158,9 +174,7 @@ def aug_img(dataset, seq, new_image_count):
     for i, split in enumerate(org_images):
         aug_batch.append(
             [
-                UnnormalizedBatch(
-                    images=split, bounding_boxes=org_bbs[i], data=org_paths[i]
-                )
+                Batch(images=split, bounding_boxes=org_bbs[i], data=org_paths[i])
                 for _ in range(new_image_count)
             ]
         )
@@ -169,25 +183,31 @@ def aug_img(dataset, seq, new_image_count):
     with alive_bar(len(aug_batch)) as bar:
         bar.text("augmenting batch by batch...")
         for batch_num, batch in enumerate(aug_batch):
-            auged_batch = seq.augment_batches(batch, background=True)
-            for ver_num, aug in enumerate(auged_batch):
-                for i, image in enumerate(aug.images_aug):
-                    bbs = aug.bounding_boxes_aug[i]
-                    path = aug.data[i]
-                    save_aug_img_and_label(image, bbs, path, batch_num + 1, ver_num + 1)
+            with multicore.Pool(seq, processes=-1, maxtasksperchild=80, seed=1) as pool:
+                generator = create_generator(batch)
+                auged_batch = pool.imap_batches_unordered(generator)
+                for ver_num, aug in enumerate(auged_batch):
+                    for i, image in enumerate(aug.images_aug):
+                        bbs = aug.bounding_boxes_aug[i]
+                        path = aug.data[i]
+                        save_aug_img_and_label(
+                            image, bbs, path, batch_num + 1, ver_num + 1
+                        )
             bar()
 
 
 if __name__ == "__main__":
+    start = time.time()
     parser = argparse.ArgumentParser()
     parser.add_argument("hyp")
     parser.add_argument("dataset")
-    parser.add_argument("--new-image-count", type=int, default=3)
+    parser.add_argument("--new-image", type=int, default=5)
     args = parser.parse_args()
 
     dataset = args.dataset
-    new_image_count = args.new_image_count
+    new_image_count = args.new_image
     hyps = load_hyp(args.hyp)
     seq = setup_augseq(hyps)
 
     aug_img(dataset, seq, new_image_count)
+    print(time.time() - start)
