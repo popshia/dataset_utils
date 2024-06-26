@@ -120,6 +120,7 @@ def load_hyp(hyp):
 
 def load_image(args, path):
     img = cv2.imread(path)  # BGR
+    # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)  # GreyScale
     assert img is not None, "Image Not Found: " + path
     h0, w0 = img.shape[:2]  # orig hw
     r = args.img_size / max(h0, w0)  # resize image to img_size
