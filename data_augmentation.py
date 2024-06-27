@@ -207,4 +207,4 @@ if __name__ == "__main__":
     seq = setup_augseq(hyps)
 
     aug_img(dataset, seq, new_image_count)
-    print(time.time() - start)
+    print(f"done in {time.time() - start:.2f} seconds.")
