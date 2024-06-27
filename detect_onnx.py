@@ -22,7 +22,6 @@ from utils.general import (
     get_class_names,
     increment_path,
     letter_box,
-    time_synchronized,
     xyxy2xywh,
 )
 
@@ -240,7 +239,7 @@ def load_video_and_inference(args):
 
         for path, img, im0s, vid_cap, ratio, dwdh in dataset:
             model_predictions = []
-            t1 = time_synchronized()
+            t1 = time.time()
 
             pred = inference_with_onnx_session(session_1, img)
             model_predictions.append(pred)
@@ -249,7 +248,7 @@ def load_video_and_inference(args):
                 pred_2 = inference_with_onnx_session(session_2, img)
                 model_predictions.append(pred_2)
 
-            t2 = time_synchronized()
+            t2 = time.time()
 
             if is_webcam:  # batch_size >= 1
                 p, s, im0, frame = str(path), "", im0s, dataset.count
