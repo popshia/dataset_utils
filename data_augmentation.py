@@ -148,7 +148,7 @@ def save_aug_img_and_label(aug_img, aug_labels, path, ver):
     cv2.imwrite(output_img_name, cv2.cvtColor(aug_img, cv2.COLOR_RGB2BGR))
 
 
-def aug_img(dataset, seq, new_image_count, no_background):
+def aug_img(dataset, seq, new_image_count):
     # get file list
     image_list = sorted(Path(dataset).glob("**/*.[jJpP][pPnN][gG]"))
     label_list = sorted(Path(dataset).glob("**/*.txt"))
@@ -178,5 +178,5 @@ if __name__ == "__main__":
     hyps = load_hyp(args.hyp)
     seq = setup_augseq(hyps)
 
-    aug_img(dataset, seq, new_image_count, args.no_background)
+    aug_img(dataset, seq, new_image_count)
     print(f"done in {time.time() - start:.2f} seconds.")
