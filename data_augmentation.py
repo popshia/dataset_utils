@@ -111,7 +111,8 @@ def read_labels(txts, images):
     org_bbs = []
     for i, txt in enumerate(txts):
         labels = load_label(txt)
-        labels[:, 1:] = xywh2xyxy(labels[:, 1:])
+        if labels != []:
+            labels[:, 1:] = xywh2xyxy(labels[:, 1:])
         org_bbs.append(label_to_ia_bbx(labels, images[i].shape))
     return org_bbs
 
