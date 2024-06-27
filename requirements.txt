@@ -3,5 +3,4 @@ imgaug
 numpy
 opencv-python
 onnxruntime
-torch
 yaml
