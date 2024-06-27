@@ -140,12 +140,14 @@ def save_aug_img_and_label(aug_img, aug_labels, path, batch, ver):
     # write aug_label to txt
     with open(output_txt_name, "w") as txt:
         for box in aug_labels:
-            box.x1, box.x2 = box.x1.clip(0, w), box.x2.clip(0, w)
-            box.y1, box.y2 = box.y1.clip(0, h), box.y2.clip(0, h)
-            xywh = xyxy2xywh((box.x1, box.y1, box.x2, box.y2))
-            xywh /= (w, h, w, h)
-            line = f"{int(box.label)} {xywh[0]:.6f} {xywh[1]:.6f} {xywh[2]:.6f} {xywh[3]:.6f}\n"
-            txt.writelines(line)
+            center_x, center_y = (box.x1 + box.x2) / 2, (box.y1 + box.y2) / 2
+            if 0 < center_x < w and 0 < center_y < h:
+                box.x1, box.x2 = box.x1.clip(0, w), box.x2.clip(0, w)
+                box.y1, box.y2 = box.y1.clip(0, h), box.y2.clip(0, h)
+                xywh = xyxy2xywh((box.x1, box.y1, box.x2, box.y2))
+                xywh /= (w, h, w, h)
+                line = f"{int(box.label)} {xywh[0]:.6f} {xywh[1]:.6f} {xywh[2]:.6f} {xywh[3]:.6f}\n"
+                txt.writelines(line)
 
     # save aug_image
     cv2.imwrite(output_img_name, cv2.cvtColor(aug_img, cv2.COLOR_RGB2BGR))
@@ -178,6 +180,7 @@ def aug_img(dataset, seq, new_image_count, no_background):
                 for _ in range(new_image_count)
             ]
         )
+        break
 
     # start augmentation and save aug_imgs and aug_labels
     with alive_bar(len(aug_batch)) as bar:
