@@ -178,7 +178,6 @@ def aug_img(dataset, seq, new_image_count, no_background):
                 for _ in range(new_image_count)
             ]
         )
-        break
 
     # start augmentation and save aug_imgs and aug_labels
     with alive_bar(len(aug_batch)) as bar:
