@@ -111,7 +111,7 @@ def read_labels(txts, images):
     org_bbs = []
     for i, txt in enumerate(txts):
         labels = load_label(txt)
-        if labels != []:
+        if labels.shape[0] != 0:
             labels[:, 1:] = xywh2xyxy(labels[:, 1:])
         org_bbs.append(label_to_ia_bbx(labels, images[i].shape))
     return org_bbs
@@ -184,16 +184,12 @@ def aug_img(dataset, seq, new_image_count):
     with alive_bar(len(aug_batch)) as bar:
         bar.text("augmenting batch by batch...")
         for batch_num, batch in enumerate(aug_batch):
-            with multicore.Pool(seq, processes=-1, maxtasksperchild=80, seed=1) as pool:
-                generator = create_generator(batch)
-                auged_batch = pool.imap_batches_unordered(generator)
-                for ver_num, aug in enumerate(auged_batch):
-                    for i, image in enumerate(aug.images_aug):
-                        bbs = aug.bounding_boxes_aug[i]
-                        path = aug.data[i]
-                        save_aug_img_and_label(
-                            image, bbs, path, batch_num + 1, ver_num + 1
-                        )
+            auged_batch = seq.augment_batches(batch, background=True)
+            for ver_num, aug in enumerate(auged_batch):
+                for i, image in enumerate(aug.images_aug):
+                    bbs = aug.bounding_boxes_aug[i]
+                    path = aug.data[i]
+                    save_aug_img_and_label(image, bbs, path, batch_num + 1, ver_num + 1)
             bar()
 
 
