@@ -141,6 +141,8 @@ def save_aug_img_and_label(aug_img, aug_labels, path, batch, ver):
     with open(output_txt_name, "w") as txt:
         for box in aug_labels:
             xywh = xyxy2xywh((box.x1, box.y1, box.x2, box.y2))
+            xywh[0], xywh[2] = xywh[0].clip(0, w), xywh[2].clip(0, w)
+            xywh[1], xywh[3] = xywh[1].clip(0, w), xywh[3].clip(0, w)
             xywh /= (w, h, w, h)
             line = f"{int(box.label)} {xywh[0]:.6f} {xywh[1]:.6f} {xywh[2]:.6f} {xywh[3]:.6f}\n"
             txt.writelines(line)
