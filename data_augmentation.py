@@ -199,7 +199,7 @@ if __name__ == "__main__":
     parser.add_argument("hyp")
     parser.add_argument("dataset")
     parser.add_argument("--new-image", type=int, default=5)
-    parser.add_argument("--no-background", action="store_true")
+    parser.add_argument("--no-background", action="store_false")
     args = parser.parse_args()
 
     dataset = args.dataset
