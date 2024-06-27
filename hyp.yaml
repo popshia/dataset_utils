@@ -1,4 +1,3 @@
-img_size: 640 # resize image size
 hsv_h: 0.015  # image HSV-Hue augmentation (fraction)
 hsv_s: 0.7  # image HSV-Saturation augmentation (fraction)
 hsv_v: 0.4  # image HSV-Value augmentation (fraction)

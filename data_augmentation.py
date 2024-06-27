@@ -57,9 +57,8 @@ def setup_augseq(hyp):
             # sometimes lambda
             # sometimes(),
             # execute 0 to 5 of the following (less important) augmenters per image
-            iaa.SomeOf((0, 5), []),
+            # iaa.SomeOf((0, 5), []),
             # resize and flip
-            iaa.Resize({"height": hyp["img_size"], "width": hyp["img_size"]}),
             iaa.Fliplr(hyp["fliplr"]),  # horizontally flip 50% of all images
             iaa.Flipud(hyp["flipud"]),  # vertically flip 20% of all images
             # crop images by -5% to 10% of their height/width
@@ -152,7 +151,7 @@ def save_aug_img_and_label(aug_img, aug_labels, path, batch, ver):
     cv2.imwrite(output_img_name, cv2.cvtColor(aug_img, cv2.COLOR_RGB2BGR))
 
 
-def aug_img(dataset, seq, new_image_count):
+def aug_img(dataset, seq, new_image_count, no_background):
     # set batch size
     number_of_batch = 200
 
@@ -185,7 +184,7 @@ def aug_img(dataset, seq, new_image_count):
     with alive_bar(len(aug_batch)) as bar:
         bar.text("augmenting batch by batch...")
         for batch_num, batch in enumerate(aug_batch):
-            auged_batch = seq.augment_batches(batch, background=True)
+            auged_batch = seq.augment_batches(batch, background=no_background)
             for ver_num, aug in enumerate(auged_batch):
                 for i, image in enumerate(aug.images_aug):
                     bbs = aug.bounding_boxes_aug[i]
@@ -200,6 +199,7 @@ if __name__ == "__main__":
     parser.add_argument("hyp")
     parser.add_argument("dataset")
     parser.add_argument("--new-image", type=int, default=5)
+    parser.add_argument("--no-background", action="store_true")
     args = parser.parse_args()
 
     dataset = args.dataset
@@ -207,5 +207,5 @@ if __name__ == "__main__":
     hyps = load_hyp(args.hyp)
     seq = setup_augseq(hyps)
 
-    aug_img(dataset, seq, new_image_count)
+    aug_img(dataset, seq, new_image_count, args.no_background)
     print(f"done in {time.time() - start:.2f} seconds.")
