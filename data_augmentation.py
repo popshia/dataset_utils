@@ -10,7 +10,8 @@ import imgaug.augmenters as iaa
 import numpy as np
 import yaml
 from alive_progress import alive_bar
-from imgaug.augmentables.batches import Batch
+from imgaug import multicore
+from imgaug.augmentables.batches import Batch, UnnormalizedBatch
 from imgaug.augmentables.bbs import BoundingBoxesOnImage
 
 from utils.data_augmentation_utils import xywh2xyxy
@@ -40,10 +41,10 @@ def label_to_ia_bbx(labels, shape):
     for label in labels:
         bbxs.append(
             ia.BoundingBox(
-                x1=label[1] * shape[1],
-                y1=label[2] * shape[0],
-                x2=label[3] * shape[1],
-                y2=label[4] * shape[0],
+                x1=int(label[1] * shape[1]),
+                y1=int(label[2] * shape[0]),
+                x2=int(label[3] * shape[1]),
+                y2=int(label[4] * shape[0]),
                 label=int(label[0]),
             )
         )
@@ -96,22 +97,16 @@ def setup_augseq(hyp):
     )
 
 
-def read_images(images):
-    org_images = []
-    for image in images:
-        org_images.append(cv2.cvtColor(cv2.imread(image.as_posix()), cv2.COLOR_BGR2RGB))
-    return org_images
+def read_image(image):
+    return cv2.cvtColor(cv2.imread(image.as_posix()), cv2.COLOR_BGR2RGB)
 
 
-def read_labels(txts, images):
-    org_bbs = []
-    for i, txt in enumerate(txts):
-        labels = load_label(txt)
-        if labels.shape[0] != 0:
-            labels[:, 1:] = xywh2xyxy(labels[:, 1:])
-        image_shape = cv2.imread(images[i].as_posix()).shape
-        org_bbs.append(label_to_ia_bbx(labels, image_shape))
-    return org_bbs
+def read_label(txt, image):
+    labels = load_label(txt)
+    if labels.shape[0] != 0:
+        labels[:, 1:] = xywh2xyxy(labels[:, 1:])
+    shape = cv2.imread(image.as_posix()).shape
+    return label_to_ia_bbx(labels, shape)
 
 
 def split_batches(list, batch_size):
@@ -124,14 +119,14 @@ def create_generator(list):
         yield list_entry
 
 
-def save_aug_img_and_label(aug_img, aug_labels, path, batch, ver):
+def save_aug_img_and_label(aug_img, aug_labels, path, ver):
     # create dir
     if not Path("runs/augmentation").is_dir():
         Path("runs/augmentation").mkdir(parents=True, exist_ok=True)
 
     # create img and txt path
-    output_img_name = "runs/augmentation/" + path.stem + f"_{batch}_{ver}" + path.suffix
-    output_txt_name = "runs/augmentation/" + path.stem + f"_{batch}_{ver}.txt"
+    output_img_name = "runs/augmentation/" + path.stem + f"_{ver}" + path.suffix
+    output_txt_name = "runs/augmentation/" + path.stem + f"_{ver}.txt"
     w, h = aug_img.shape[1], aug_img.shape[0]
 
     # show augmented image
@@ -154,45 +149,19 @@ def save_aug_img_and_label(aug_img, aug_labels, path, batch, ver):
 
 
 def aug_img(dataset, seq, new_image_count, no_background):
-    # set batch size
-    number_of_batch = 64
-
     # get file list
     image_list = sorted(Path(dataset).glob("**/*.[jJpP][pPnN][gG]"))
     label_list = sorted(Path(dataset).glob("**/*.txt"))
 
-    # split images, labels and path to batch
-    image_list = list(split_batches(image_list, number_of_batch))
-    label_list = list(split_batches(label_list, number_of_batch))
-
-    # create aug_batch list
-    aug_batch = []
-
-    # create batch for augmentation
-    print("reading images and labels to memory and split batches...")
-    for i in range(len(image_list)):
-        # read images and labels
-        images = read_images(image_list[i])
-        labels = read_labels(label_list[i], image_list[i])
-        aug_batch.append(
-            [
-                Batch(images=images, bounding_boxes=labels, data=image_list[i])
-                for _ in range(new_image_count)
-            ]
-        )
-        break
-
-    # start augmentation and save aug_imgs and aug_labels
-    with alive_bar(len(aug_batch)) as bar:
-        print("augmenting batch by batch...")
-        for batch_num, batch in enumerate(aug_batch):
-            auged_batch = seq.augment_batches(batch, background=no_background)
-            for ver_num, aug in enumerate(auged_batch):
-                for i, image in enumerate(aug.images_aug):
-                    bbs = aug.bounding_boxes_aug[i]
-                    path = aug.data[i]
-                    bar.text(path.stem)
-                    save_aug_img_and_label(image, bbs, path, batch_num + 1, ver_num + 1)
+    with alive_bar(len(image_list)) as bar:
+        for i in range(len(image_list)):
+            bar.text(image_list[i].stem)
+            for ver in range(new_image_count):
+                image, label = image_list[i], label_list[i]
+                aug_img, aug_label = seq(
+                    image=read_image(image), bounding_boxes=read_label(label, image)
+                )
+                save_aug_img_and_label(aug_img, aug_label, image, ver + 1)
             bar()
 
 
@@ -202,7 +171,6 @@ if __name__ == "__main__":
     parser.add_argument("hyp")
     parser.add_argument("dataset")
     parser.add_argument("--new-image", type=int, default=5)
-    parser.add_argument("--no-background", action="store_false")
     args = parser.parse_args()
 
     dataset = args.dataset
