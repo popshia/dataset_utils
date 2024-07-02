@@ -18,7 +18,7 @@ from utils.general import xyxy2xywh
 
 def load_label(path):
     with open(path, "r") as input:
-        labels = [x.split() for x in input.read().strip().splitlines()]
+        labels = [value.split() for value in input.read().strip().splitlines()]
         labels = np.array(labels, dtype=np.float32)
 
     return labels
@@ -28,9 +28,8 @@ def load_hyp(hyp):
     with open(hyp) as input:
         hyps = yaml.load(input, Loader=yaml.SafeLoader)  # load hyps
 
-    pprint.pprint(", ".join(f"{k}={v}" for k, v in hyps.items()))
+    pprint.pprint(", ".join(f"{key}={value}" for key, value in hyps.items()))
     print("-" * os.get_terminal_size().columns)
-
     return hyps
 
 
@@ -49,19 +48,17 @@ def label_to_ia_bbx(labels, shape):
     return BoundingBoxesOnImage(bbxs, shape=shape)
 
 
-def setup_augseq(hyp):
+def set_up_augseq(hyp):
     sometimes = lambda aug: iaa.Sometimes(0.5, aug)
     return iaa.Sequential(
         [
             # execute 0 to 5 of the following (less important) augmenters per image
             # iaa.SomeOf((0, 5), []),
-            # resize and flip
-            iaa.Fliplr(hyp["fliplr"]),  # horizontally flip 50% of all images
-            iaa.Flipud(hyp["flipud"]),  # vertically flip 20% of all images
+            # flip
+            iaa.Fliplr(hyp["fliplr"]),
+            iaa.Flipud(hyp["flipud"]),
             # crop images by -5% to 10% of their height/width
-            # sometimes(
-            #     iaa.CropAndPad(percent=(-0.05, 0.1), pad_mode=ia.ALL, pad_cval=(0, 255))
-            # ),
+            # iaa.CropAndPad(percent=(-0.05, 0.1), pad_mode=ia.ALL, pad_cval=(0, 255)),
             iaa.Affine(
                 scale={
                     "x": (1 - hyp["scale"], 1 + hyp["scale"]),
@@ -107,16 +104,6 @@ def read_label(txt, image):
     return label_to_ia_bbx(labels, shape)
 
 
-def split_batches(list, batch_size):
-    for i in range(0, len(list), batch_size):
-        yield list[i : i + batch_size]
-
-
-def create_generator(list):
-    for list_entry in list:
-        yield list_entry
-
-
 def save_aug_img_and_label(aug_img, aug_labels, path, ver):
     # create dir
     if not Path("runs/augmentation").is_dir():
@@ -146,9 +133,9 @@ def save_aug_img_and_label(aug_img, aug_labels, path, ver):
     cv2.imwrite(output_img_name, cv2.cvtColor(aug_img, cv2.COLOR_RGB2BGR))
 
 
-def aug_img(dataset, seq, new_image_count):
+def aug_img(dataset, aug_seq, new_image_count):
     # get file list
-    image_list = sorted(Path(dataset).glob("**/*.[jJpP][pPnN][gG]"))
+    image_list = sorted(Path(dataset).glob("**/*.[jJpPbB][pPnNmM][gGpP]"))
     label_list = sorted(Path(dataset).glob("**/*.txt"))
 
     with alive_bar(len(image_list)) as bar:
@@ -156,7 +143,7 @@ def aug_img(dataset, seq, new_image_count):
             bar.text(image_list[i].stem)
             for ver in range(new_image_count):
                 image, label = image_list[i], label_list[i]
-                aug_img, aug_label = seq(
+                aug_img, aug_label = aug_seq(
                     image=read_image(image), bounding_boxes=read_label(label, image)
                 )
                 save_aug_img_and_label(aug_img, aug_label, image, ver + 1)
@@ -174,7 +161,7 @@ if __name__ == "__main__":
     dataset = args.dataset
     new_image_count = args.new_image
     hyps = load_hyp(args.hyp)
-    seq = setup_augseq(hyps)
+    aug_seq = set_up_augseq(hyps)
 
-    aug_img(dataset, seq, new_image_count)
+    aug_img(dataset, aug_seq, new_image_count)
     print(f"done in {time.time() - start:.2f} seconds.")
