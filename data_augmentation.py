@@ -114,8 +114,9 @@ def save_aug_img_and_label(aug_img, aug_labels, path, ver):
     output_txt_name = "runs/augmentation/" + path.stem + f"_{ver}.txt"
     w, h = aug_img.shape[1], aug_img.shape[0]
 
-    # show augmented image
-    # ia.imshow(aug_labels.draw_on_image(aug_img, size=1))
+    # show augmented image if show file exists
+    if Path("./show").is_file():
+        ia.imshow(aug_labels.draw_on_image(aug_img, size=1))
 
     # write aug_label to txt
     with open(output_txt_name, "w") as txt:
