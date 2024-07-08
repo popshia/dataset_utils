@@ -230,13 +230,6 @@ def load_video_and_inference(args):
 
     t0 = time.time()
     with alive_bar(len(dataset)) as bar:
-        human_in_roi = False
-        approved = False
-        without_buckle = False
-        without_buckle_start_time = 0
-        nothing = False
-        nothing_start_time = 0
-
         for path, img, im0s, vid_cap, ratio, dwdh in dataset:
             model_predictions = []
             t1 = time.time()
@@ -293,20 +286,10 @@ def load_video_and_inference(args):
                             )
 
                     for _, *xyxy, cls, conf in pred:  # detections per image
-                        # if conf > conf_thres:
-                        if conf > conf_thres and int(cls) == 0:
+                        if conf > conf_thres:
                             xyxy -= np.array(dwdh * 2)
                             xyxy /= ratio
                             xyxy = xyxy.round().astype(np.int32).tolist()
-
-                            # check person x coordinate
-                            if i == 1 and int(cls) == 0:
-                                human_in_roi = (
-                                    True
-                                    if 765 < (xyxy[0] + xyxy[2]) / 2 < 1470
-                                    else False
-                                )
-                                print(human_in_roi)
 
                             # Plot box
                             if args.no_label:
@@ -330,65 +313,6 @@ def load_video_and_inference(args):
                 f"{s}({(1E3 * (t2 - t1)):.1f}ms) Inference, {int(1/(t2-t1))} fps."
             )
             print(result_str)
-
-            # check human and buckle ############################################################
-            # text_pos = (25, 25)
-            # red = [0, 0, 255]
-            # green = [0, 255, 0]
-            # border_img = im0[10 : im0.shape[0] - 10, 10 : im0.shape[1] - 10]
-            #
-            # if (human_in_roi and "buckle_fastened" not in result_str) or (
-            #     human_in_roi
-            #     and "person" in result_str
-            #     and "buckle_fastened" not in result_str
-            # ):
-            #     nothing_start_time = 0
-            #
-            #     if without_buckle_start_time == 0:
-            #         without_buckle_start_time = int(time.time())
-            #
-            #     without_buckle_timer = int(time.time()) - without_buckle_start_time
-            #
-            #     if 3 <= without_buckle_timer < 6:
-            #         text = f"ALARM {without_buckle_timer}"
-            #         approved = False
-            #     elif without_buckle_timer >= 6:
-            #         text = f"SEND ALARM! {without_buckle_timer}"
-            #         im0 = cv2.copyMakeBorder(
-            #             border_img, 10, 10, 10, 10, cv2.BORDER_CONSTANT, None, red
-            #         )
-            #         approved = False
-            #     else:
-            #         text = f"Countdown: {without_buckle_timer}"
-            #
-            #     if approved:
-            #         plot_alarm_message(text_pos, im0, text, green)
-            #     else:
-            #         plot_alarm_message(text_pos, im0, text, red)
-            # elif (
-            #     human_in_roi
-            #     and "person" in result_str
-            #     and "buckle_fastened" in result_str
-            # ):
-            #     nothing_start_time = 0
-            #     without_buckle_start_time = 0
-            #     plot_alarm_message(text_pos, im0, "APPROVED!", green)
-            #     approved = True
-            # else:
-            #     if approved:
-            #         if nothing_start_time == 0:
-            #             nothing_start_time = int(time.time())
-            #
-            #         nothing_timer = int(time.time()) - nothing_start_time
-            #
-            #         if nothing_timer < 2:
-            #             cv2.putText(
-            #                 im0, "APPROVED!", text_pos, 0, 3, green, 3, cv2.LINE_AA
-            #             )
-            #             plot_alarm_message(text_pos, im0, "APPROVED!", green)
-            #         else:
-            #             approved = False
-            #####################################################################################
 
             # Stream results
             if args.view_img and (dataset.mode == "video" or dataset.mode == "stream"):

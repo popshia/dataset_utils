@@ -26,7 +26,7 @@ def load_label(path):
 
 def load_hyp(hyp):
     with open(hyp) as input:
-        hyps = yaml.load(input, Loader=yaml.SafeLoader)  # load hyps
+        hyps = yaml.load(input, Loader=yaml.SafeLoader)
 
     pprint.pprint(", ".join(f"{key}={value}" for key, value in hyps.items()))
     print("-" * os.get_terminal_size().columns)
