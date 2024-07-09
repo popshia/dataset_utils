@@ -10,10 +10,21 @@ import imgaug.augmenters as iaa
 import numpy as np
 import yaml
 from alive_progress import alive_bar
+from cv2.dnn import imagesFromBlob
 from imgaug.augmentables.bbs import BoundingBoxesOnImage
 
 from utils.data_augmentation_utils import xywh2xyxy
 from utils.general import xyxy2xywh
+
+IMG_TYPE_PATTERN = [
+    "**/*.jpeg",
+    "**/*.jpg",
+    "**/*.JPG",
+    "**/*.png",
+    "**/*.PNG",
+    "**/*.bmp",
+    "**/*.BMP",
+]
 
 
 def load_label(path):
@@ -60,10 +71,7 @@ def set_up_augseq(hyp):
             # crop images by -5% to 10% of their height/width
             # iaa.CropAndPad(percent=(-0.05, 0.1), pad_mode=ia.ALL, pad_cval=(0, 255)),
             iaa.Affine(
-                scale={
-                    "x": (1 - hyp["scale"], 1 + hyp["scale"]),
-                    "y": (1 - hyp["scale"], 1 + hyp["scale"]),
-                },
+                scale=(1 - hyp["scale"], 1 + hyp["scale"]),
                 translate_percent={
                     "x": (-hyp["translate"], hyp["translate"]),
                     "y": (-hyp["translate"], hyp["translate"]),
@@ -136,8 +144,17 @@ def save_aug_img_and_label(aug_img, aug_labels, path, ver):
 
 def aug_img(dataset, aug_seq, new_image_count):
     # get file list
-    image_list = sorted(Path(dataset).glob("**/*.[jJpPbB][pPnNmM][gGpP]"))
+    image_list = []
+    for pattern in IMG_TYPE_PATTERN:
+        image_list.extend(Path(dataset).glob(pattern))
+    image_list = sorted(image_list)
     label_list = sorted(Path(dataset).glob("**/*.txt"))
+    pprint.pprint(image_list)
+    pprint.pprint(label_list)
+
+    assert len(image_list) == len(
+        label_list
+    ), "image count doesn't match with label, please check your dataset"
 
     with alive_bar(len(image_list)) as bar:
         for i in range(len(image_list)):

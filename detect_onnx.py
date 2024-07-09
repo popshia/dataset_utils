@@ -137,7 +137,11 @@ class LoadImages:  # for inference
 
     def __len__(self):
         if True in self.video_flag:
-            return int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            total_frame = 0
+            for vid in self.files:
+                print(vid)
+                total_frame += int(cv2.VideoCapture(vid).get(cv2.CAP_PROP_FRAME_COUNT))
+            return total_frame
         else:
             return self.file_count  # number of files
 
