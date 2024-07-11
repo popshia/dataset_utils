@@ -149,12 +149,17 @@ def aug_img(dataset, aug_seq, new_image_count):
         image_list.extend(Path(dataset).glob(pattern))
     image_list = sorted(image_list)
     label_list = sorted(Path(dataset).glob("**/*.txt"))
-    pprint.pprint(image_list)
-    pprint.pprint(label_list)
 
+    # check image and label count
     assert len(image_list) == len(
         label_list
-    ), "image count doesn't match with label, please check your dataset"
+    ), "image count doesn't match with label, please check your dataset."
+
+    # check image and label matching
+    for i in range(len(image_list)):
+        assert (
+            image_list[i].stem == label_list[i].stem
+        ), "mismatch image and label, please check your dataset."
 
     with alive_bar(len(image_list)) as bar:
         for i in range(len(image_list)):
