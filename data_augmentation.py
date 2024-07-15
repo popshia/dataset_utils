@@ -10,7 +10,6 @@ import imgaug.augmenters as iaa
 import numpy as np
 import yaml
 from alive_progress import alive_bar
-from cv2.dnn import imagesFromBlob
 from imgaug.augmentables.bbs import BoundingBoxesOnImage
 
 from utils.data_augmentation_utils import xywh2xyxy
