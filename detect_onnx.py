@@ -25,11 +25,10 @@ from utils.general import (
     xyxy2xywh,
 )
 
-ORT_PROVIDERS = (
-    ["CUDAExecutionProvider", "CPUExecutionProvider"]
-    if torch.cuda.is_available()
-    else ["CPUExecutionProvider"]
-)
+ORT_PROVIDERS = [
+    ("CUDAExecutionProvider" if torch.cuda.is_available() else "CPUExecutionProvider")
+]
+
 
 IMG_FORMATS = [
     ".bmp",
