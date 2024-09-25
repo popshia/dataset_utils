@@ -4,20 +4,25 @@ import shutil
 from pathlib import Path
 from random import randrange
 
+from alive_progress import alive_bar
+
 
 def create_dirs_and_move_files(file_list, dest):
-    for file in file_list:
-        new_path = Path(Path.cwd())
-        parents = file.parent.as_posix().split("/")[1:]
-        parents.insert(0, dest)
-        for parent in parents:
-            new_path = new_path.joinpath(parent)
+    with alive_bar(len(file_list)) as bar:
+        for file in file_list:
+            new_path = Path(Path.cwd())
+            parents = file.parent.as_posix().split("/")[1:]
+            parents.insert(0, dest)
+            for parent in parents:
+                new_path = new_path.joinpath(parent)
 
-        Path.mkdir(new_path, parents=True, exist_ok=True)
-        shutil.copy(file, new_path)
+            Path.mkdir(new_path, parents=True, exist_ok=True)
+            shutil.copy(file, new_path)
 
-        if Path(file.with_suffix(".txt")).exists():
-            shutil.copy(file.with_suffix(".txt"), new_path)
+            if Path(file.with_suffix(".txt")).exists():
+                shutil.copy(file.with_suffix(".txt"), new_path)
+
+            bar()
 
 
 def split_train_val(args):
