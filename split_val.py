@@ -1,5 +1,4 @@
 import argparse
-import os
 import shutil
 from pathlib import Path
 from random import randrange
@@ -13,14 +12,10 @@ def create_dirs_and_move_files(file_list, dest):
         for parent in parents:
             new_path = new_path.joinpath(parent)
         Path.mkdir(new_path, parents=True, exist_ok=True)
-        print(new_path)
-        print(file, file.with_suffix(".txt"))
 
         shutil.copy(file, new_path)
         if Path(file.with_suffix(".txt")).exists():
             shutil.copy(file.with_suffix(".txt"), new_path)
-
-        print("-" * os.get_terminal_size().columns)
 
 
 def split_train_val(args):
