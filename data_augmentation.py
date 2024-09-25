@@ -113,12 +113,12 @@ def read_label(txt, image):
 
 def save_aug_img_and_label(aug_img, aug_labels, path, ver):
     # create dir
-    if not Path("runs/augmentation").is_dir():
-        Path("runs/augmentation").mkdir(parents=True, exist_ok=True)
+    if not Path("aug_dataset").is_dir():
+        Path("aug_dataset").mkdir(parents=True, exist_ok=True)
 
     # create img and txt path
-    output_img_name = "runs/augmentation/" + path.stem + f"_{ver}" + path.suffix
-    output_txt_name = "runs/augmentation/" + path.stem + f"_{ver}.txt"
+    output_img_name = "aug_dataset" + path.stem + f"_{ver}" + path.suffix
+    output_txt_name = "aug_dataset" + path.stem + f"_{ver}.txt"
     w, h = aug_img.shape[1], aug_img.shape[0]
 
     # show augmented image if show file exists
