@@ -117,8 +117,8 @@ def save_aug_img_and_label(aug_img, aug_labels, path, ver):
         Path("aug_dataset").mkdir(parents=True, exist_ok=True)
 
     # create img and txt path
-    output_img_name = "aug_dataset" + path.stem + f"_{ver}" + path.suffix
-    output_txt_name = "aug_dataset" + path.stem + f"_{ver}.txt"
+    output_img_name = "aug_dataset/" + path.stem + f"_{ver}" + path.suffix
+    output_txt_name = "aug_dataset/" + path.stem + f"_{ver}.txt"
     w, h = aug_img.shape[1], aug_img.shape[0]
 
     # show augmented image if show file exists
