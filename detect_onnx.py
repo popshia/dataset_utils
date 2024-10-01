@@ -13,7 +13,6 @@ from alive_progress import alive_bar
 
 from utils.detect_onnx_utils import (
     inference_with_onnx_session,
-    plot_alarm_message,
     plot_one_box,
     proprocess_img,
 )
