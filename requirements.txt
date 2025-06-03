@@ -5,4 +5,4 @@ opencv-python
 pyyaml
 onnx
 onnxruntime
-onnxruntime-gpu
+# onnxruntime-gpu
