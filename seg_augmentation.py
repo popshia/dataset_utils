@@ -1,15 +1,21 @@
+import json
+import os
 import pprint
+
+import cv2
+import imgaug.augmenters as iaa
+import numpy as np
 import yaml
 from alive_progress import alive_bar
+from imgaug.augmentables.kps import Keypoint, KeypointsOnImage
 
 
-def load_hyp(hyp):
-    with open(hyp) as input:
-        hyps = yaml.load(input, Loader=yaml.SafeLoader)
-
-    pprint.pprint(", ".join(f"{key}={value}" for key, value in hyps.items()))
+def load_hyp(hyp_path):
+    with open(hyp_path) as file:
+        hyp = yaml.load(file, Loader=yaml.SafeLoader)
+    pprint.pprint(", ".join(f"{k}={v}" for k, v in hyp.items()))
     print("-" * os.get_terminal_size().columns)
-    return hyps
+    return hyp
 
 
 def set_up_augseq(hyp):
@@ -53,143 +59,169 @@ def set_up_augseq(hyp):
     )
 
 
-import os
-import json
-import cv2
-import numpy as np
-import imgaug.augmenters as iaa
-from imgaug.augmentables.kps import  Keypoint, KeypointsOnImage
-
-
-def load_yolo_annotations(annotation_file):
-    """讀取 YOLOv8 物件分割標註資料"""
+def load_yolo_annotations(file_path):
     annotations = []
-    with open(annotation_file, 'r') as f:
-        for line in f.readlines():
-            values = list(map(float, line.strip().split()))
-            class_id = int(values[0])
-            points = np.array(values[1:]).reshape(-1, 2)  # 每兩個值為一組 (x, y)
-            annotations.append((class_id, points))
+    with open(file_path, "r") as f:
+        for line in f:
+            parts = list(map(float, line.strip().split()))
+            cls_id = int(parts[0])
+            points = np.array(parts[1:]).reshape(-1, 2)
+            annotations.append((cls_id, points))
     return annotations
+
 
 def load_coco_annotations(annotation_file):
     """讀取 COCO 標註資料"""
-    with open(annotation_file, 'r') as f:
+    with open(annotation_file, "r") as f:
         data = json.load(f)
     return data
 
-def apply_augmentation(image, polygons, augmenters):
-    """對影像和標註的分割點同步進行增強處理"""
-    h, w = image.shape[:2]
 
-    # 儲存每個 polygon 的長度
+def apply_augmentation(image, polygons, augmenter):
+    h, w = image.shape[:2]
     point_counts = [len(poly) for poly in polygons]
     keypoints = [Keypoint(x * w, y * h) for poly in polygons for x, y in poly]
-    kps_on_image = KeypointsOnImage(keypoints, shape=image.shape)
-    image_aug, keypoints_aug = augmenters(image=image, keypoints=kps_on_image)
-    image_after = keypoints_aug.draw_on_image(image_aug, size=7)
-    image_after_rz = cv2.resize(image_after, None, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+    kps = KeypointsOnImage(keypoints, shape=image.shape)
+    image_aug, kps_aug = augmenter(image=image, keypoints=kps)
 
-    # 將 keypoints 還原成多個 polygon 轉換回標註格式 (正規化)
-    polygons_aug = []
     idx = 0
+    polygons_aug = []
     for count in point_counts:
-        poly = [(keypoints_aug.keypoints[i].x / w, keypoints_aug.keypoints[i].y / h) for i in range(idx, idx + count)]
+        poly = [
+            (kps_aug.keypoints[i].x / w, kps_aug.keypoints[i].y / h)
+            for i in range(idx, idx + count)
+        ]
         polygons_aug.append(poly)
         idx += count
 
     return image_aug, polygons_aug
 
 
-def clip_polygon_to_image_border(polygon, img_w, img_h):
-    """
-    將多邊形限制在影像邊界內，超出範圍的點會被移除或調整到邊界
-    以0-indexing處理
-    """
+def correct_point_to_boundary(cx, cy, x, y, img_w, img_h):
+    dx = x - cx
+    dy = y - cy
 
-    max_x = (img_w - 1) / img_w
-    max_y = (img_h - 1) / img_h
-    clipped_polygon = []
-    for x, y in polygon:
-        x = min(max(x, 0), max_x)
-        y = min(max(y, 0), max_y)
-        clipped_polygon.append((x, y))
-    return clipped_polygon
+    if dx == 0 and dy == 0:
+        return cx, cy
+
+    intersections = []
+
+    # 與左邊界 (x = 0)
+    if dx != 0:
+        t = -cx / dx
+        py = cy + t * dy
+        if t >= 0 and 0 <= py <= img_h - 1:
+            intersections.append((0, py))
+
+    # 與右邊界 (x = img_w - 1)
+    if dx != 0:
+        t = (img_w - 1 - cx) / dx
+        py = cy + t * dy
+        if t >= 0 and 0 <= py <= img_h - 1:
+            intersections.append((img_w - 1, py))
+
+    # 與上邊界 (y = 0)
+    if dy != 0:
+        t = -cy / dy
+        px = cx + t * dx
+        if t >= 0 and 0 <= px <= img_w - 1:
+            intersections.append((px, 0))
+
+    # 與下邊界 (y = img_h - 1)
+    if dy != 0:
+        t = (img_h - 1 - cy) / dy
+        px = cx + t * dx
+        if t >= 0 and 0 <= px <= img_w - 1:
+            intersections.append((px, img_h - 1))
+
+    if intersections:
+        # 回傳距離起點最近的交點
+        intersections.sort(key=lambda pt: (pt[0] - cx) ** 2 + (pt[1] - cy) ** 2)
+        return intersections[0]
+
+    return cx, cy
 
 
-def save_augmented_data(image, annotations, output_img_path, output_ann_path, CLASS_LIST):
-    """儲存擴增後的影像與標註"""
-    os.makedirs(os.path.dirname(output_img_path), exist_ok=True)
+def save_augmented(image, annotations, img_out_path, ann_out_path):
+    os.makedirs(os.path.dirname(img_out_path), exist_ok=True)
+    cv2.imencode("." + img_out_path.split(".")[-1], image)[1].tofile(img_out_path)
 
-    cv2.imencode('.'+output_img_path.split('.')[-1], image)[1].tofile(output_img_path)
+    h, w = image.shape[:2]
+    cx, cy = w / 2.0, h / 2.0
 
-    with open(output_ann_path, 'w') as f:
-        for class_id, poly in annotations:
-            clipped_poly = clip_polygon_to_image_border(poly, image.shape[1], image.shape[0])
-            if class_id == CLASS_LIST.index('land'):  # land只要輪廓有超過3個點就保留
-                if len(clipped_poly) >= 3:
-                    line = f"{class_id} " + " ".join([f"{x:.6f} {y:.6f}" for x, y in clipped_poly]) + "\n"
-                    f.write(line)
-            else:
-                if all(0 <= x <= 1 and 0 <= y <= 1 for x, y in poly):  # 只在所有點都在影像內時保留
-                    line = f"{class_id} " + " ".join([f"{x:.6f} {y:.6f}" for x, y in poly]) + "\n"
-                    f.write(line)
+    with open(ann_out_path, "w") as f:
+        for cls_id, poly in annotations:
+            corrected_norm = []
+            for x_norm, y_norm in poly:
+                # 轉為像素座標
+                x_pix = x_norm * w
+                y_pix = y_norm * h
+                # 如果超出邊界，修正到邊界
+                if not (0 <= x_pix <= w - 1 and 0 <= y_pix <= h - 1):
+                    x_corr, y_corr = correct_point_to_boundary(
+                        cx, cy, x_pix, y_pix, w, h
+                    )
+                    print(f"修正點 ({x_pix}, {y_pix}) 到邊界 ({x_corr}, {y_corr})")
+                else:
+                    x_corr, y_corr = x_pix, y_pix
+                # 轉回歸一化座標
+                corrected_norm.append((x_corr / w, y_corr / h))
 
-    print(f"Saved: {output_img_path}, {output_ann_path}")
+            line = (
+                f"{cls_id} "
+                + " ".join(f"{x:.6f} {y:.6f}" for x, y in corrected_norm)
+                + "\n"
+            )
+            f.write(line)
+    print(f"Saved: {img_out_path}, {ann_out_path}")
 
 
-def main(image_dir, annotation_dir, output_dir, hyp_dir, NEW_IMAGE_TO_CREATE, CLASS_LIST):
+def process_dataset(
+    image_dir, annotation_dir, output_dir, hyp_file, num_augs, class_list
+):
     os.makedirs(output_dir, exist_ok=True)
+    hyp = load_hyp(hyp_file)
+    augmenter = set_up_augseq(hyp)
+    image_files = [
+        f
+        for f in os.listdir(image_dir)
+        if f.lower().endswith((".jpg", ".jpeg", ".png"))
+    ]
 
-    hyps = load_hyp(hyp_dir)
-    augmenters = set_up_augseq(hyps)
-
-    with alive_bar(len(os.listdir(image_dir))) as bar:
-        for img_file in os.listdir(image_dir):
-
-            bar.text(os.path.basename(img_file))
-
-            if not img_file.endswith(('.jpg', '.jpeg', '.png')):
-                continue
+    with alive_bar(len(image_files)) as bar:
+        for img_file in image_files:
+            bar.text(img_file)
             img_path = os.path.join(image_dir, img_file)
-            ann_path = os.path.join(annotation_dir, img_file.replace('.jpg', '.txt').replace('.png', '.txt').replace('.jpeg', '.txt'))
+            ann_path = os.path.join(
+                annotation_dir, os.path.splitext(img_file)[0] + ".txt"
+            )
 
             if not os.path.exists(ann_path):
                 print(f"Warning: No annotation found for {img_file}")
+                bar()
                 continue
 
-            # image = cv2.imread(img_path)
             image = cv2.imdecode(np.fromfile(img_path, dtype=np.uint8), -1)
             if image is None:
                 print(f"Warning: Could not read image {img_path}")
+                bar()
                 continue
 
             annotations = load_yolo_annotations(ann_path)
             class_ids, polygons = zip(*annotations) if annotations else ([], [])
 
-            for ver in range(1, NEW_IMAGE_TO_CREATE+1):
-                image_aug, polygons_aug = apply_augmentation(image, polygons, augmenters)
+            for i in range(1, num_augs + 1):
+                img_aug, poly_aug = apply_augmentation(image, polygons, augmenter)
+                aug_ann = list(zip(class_ids, poly_aug))
 
-                augmented_annotations = list(zip(class_ids, polygons_aug))
+                base_name, ext = os.path.splitext(img_file)
+                img_out = os.path.join(output_dir, f"{base_name}_aug_{i}{ext}")
+                ann_out = os.path.join(output_dir, f"{base_name}_aug_{i}.txt")
 
-                img_name, img_ext = os.path.splitext(os.path.basename(img_file))
-                output_img_path = os.path.join(output_dir, img_name + f"_aug_{ver}" + img_ext)
-                ann_file_name, ann_file_ext = os.path.splitext(os.path.basename(ann_path))
-                output_ann_path = os.path.join(output_dir, ann_file_name + f'_aug_{ver}' + ann_file_ext)
-
-                save_augmented_data(image_aug, augmented_annotations, output_img_path, output_ann_path, CLASS_LIST)
+                save_augmented(img_aug, aug_ann, img_out, ann_out)
 
             bar()
 
-
-# if __name__ == "__main__":
-#     IMAGE_DIR = r"D:\c-link\個人區\Tai\專案區\114-0004-萬海智慧監控二期\Tai\程式撰寫\訓練資料\標註檔\20250507_6cls_modify_aug_land_label\YOLODataset\train\images"
-#     ANNOTATION_DIR = r"D:\c-link\個人區\Tai\專案區\114-0004-萬海智慧監控二期\Tai\程式撰寫\訓練資料\標註檔\20250507_6cls_modify_aug_land_label\YOLODataset\train\labels"
-#     OUTPUT_DIR = r"D:\c-link\個人區\Tai\專案區\114-0004-萬海智慧監控二期\Tai\程式撰寫\訓練資料\標註檔\20250507_6cls_modify_aug_land_label\YOLODataset\train\images\aug"
-#     HYP_DIR = r"D:\c-link\個人區\Tai\專案區\114-0004-萬海智慧監控二期\Tai\程式撰寫\訓練資料\標註檔\20250507_6cls_modify_aug_land_label\YOLODataset\aug_hyp.yaml"
-#     NEW_IMAGE_TO_CREATE = 5
-#     CLASS_LIST = ['main_vessel', 'land', 'big_vessel', 'waypoint', 'last_waypoint', 'small_vessel']
-#     main(IMAGE_DIR, ANNOTATION_DIR, OUTPUT_DIR, HYP_DIR, NEW_IMAGE_TO_CREATE, CLASS_LIST)
 
 if __name__ == "__main__":
     start = time.time()
@@ -198,8 +230,18 @@ if __name__ == "__main__":
     parser.add_argument("annotation-dir")
     parser.add_argument("output-dir")
     parser.add_argument("hyp")
-    parser.add_argument("classes")
     parser.add_argument("--new-image", type=int, default=5)
     args = parser.parse_args()
-    main(args.image_dir, args.annotation_dir, args.output_dir, args.hyp, args.new_image, args.classes)
-    print(f"done in {time.time() - start:.2f} seconds.")
+    classes = [""]
+    try:
+        process_dataset(
+            args.image_dir,
+            args.annotation_dir,
+            args.output_dir,
+            args.hyp,
+            args.new_image,
+            classes,
+        )
+        print(f"done in {time.time() - start:.2f} seconds.")
+    except Exception as e:
+        print(f"Error: {e}")
