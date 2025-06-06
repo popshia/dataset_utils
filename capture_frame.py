@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+from pprint import pprint
 
 import cv2
 
@@ -24,7 +25,10 @@ def main(args):
     # Get all video files in the input directory
     files = sorted(input_dir.glob("**/*"))
     videos = [file for file in files if file.suffix.lower() in VID_FORMATS]
-    print(videos)
+    pprint([video.name for video in videos])
+    print(
+        "\nVideo Playback - Press 's' to Save, 'd' to Play next video, 'q' to Quit.\n"
+    )
 
     if not videos:
         print("No video files found in the input directory.")
@@ -38,7 +42,7 @@ def main(args):
             print(f"Error opening video file: {video}")
             continue
 
-        print(f"Playing: {video}")
+        print(f"Now playing {video.name}")
         frame_count = 0
         saved_count = 0
 
@@ -61,7 +65,7 @@ def main(args):
                 print(f"Saved frame to {frame_path}")
                 saved_count += 1
             elif key == ord("d"):
-                print("Quitting current video.")
+                print(f"Stop playing {video.name}\n")
                 break
             elif key == ord("q"):
                 exit(0)
