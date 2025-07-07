@@ -57,7 +57,7 @@ def main(args):
                 frame,
             )
 
-            key = cv2.waitKey(10) & 0xFF
+            key = cv2.waitKey(1) & 0xFF
             if key == ord("s"):
                 frame_filename = f"{video.stem}_frame{frame_count:05}.jpg"
                 frame_path = Path(output_dir / frame_filename)
