@@ -1,6 +1,8 @@
+import argparse
 import json
 import os
 import pprint
+import time
 
 import cv2
 import imgaug.augmenters as iaa
@@ -226,11 +228,11 @@ def process_dataset(
 if __name__ == "__main__":
     start = time.time()
     parser = argparse.ArgumentParser()
-    parser.add_argument("image-dir")
-    parser.add_argument("annotation-dir")
-    parser.add_argument("output-dir")
+    parser.add_argument("image_dir")
+    parser.add_argument("annotation_dir")
+    parser.add_argument("output_dir")
     parser.add_argument("hyp")
-    parser.add_argument("--new-image", type=int, default=5)
+    parser.add_argument("--new_image", type=int, default=5)
     args = parser.parse_args()
     classes = [""]
     try:
