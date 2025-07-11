@@ -16,16 +16,15 @@ def create_dirs_and_move_files(file_list, dest):
             for parent in parents:
                 new_path = new_path.joinpath(parent)
 
-            Path.mkdir(new_path, parents=True, exist_ok=True)
-            shutil.copy(file, new_path)
             txt_path = new_path.parts
             txt_path = txt_path[:-2] + ("labels",) + txt_path[-1:]
             txt_path = Path(*txt_path)
-            print(new_path, txt_path)
-            return
+            Path.mkdir(txt_path, parents=True, exist_ok=True)
+            Path.mkdir(new_path, parents=True, exist_ok=True)
+            shutil.copy(file, new_path)
 
             if Path(file.with_suffix(".txt")).exists():
-                shutil.copy(file.with_suffix(".txt"), new_path)
+                shutil.copy(file.with_suffix(".txt"), txt_path)
 
             bar()
 
