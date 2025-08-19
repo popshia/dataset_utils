@@ -53,11 +53,14 @@ def main(args):
 
             frame_count += 1
             cv2.imshow(
-                "Video Playback - Press 's' to Save, 'd' to Play next video, 'q' to Quit",
+                f"{video.name} - Press 's' to Save, 'd' to Play next video, 'q' to Quit",
                 frame,
             )
 
-            key = cv2.waitKey(1) & 0xFF
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            delay = int(1000 / fps) if fps > 0 else 33  # fallback to ~30 FPS
+
+            key = cv2.waitKey(delay) & 0xFF
             if key == ord("s"):
                 frame_filename = f"{video.stem}_frame{frame_count:05}.jpg"
                 frame_path = Path(output_dir / frame_filename)
