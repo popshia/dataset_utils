@@ -192,36 +192,44 @@ def process_dataset(
 
     with alive_bar(len(image_files)) as bar:
         for img_file in image_files:
-            bar.text(img_file)
-            img_path = os.path.join(image_dir, img_file)
-            ann_path = os.path.join(
-                annotation_dir, os.path.splitext(img_file)[0] + ".txt"
-            )
+            try:
+                bar.text(img_file)
+                img_path = os.path.join(image_dir, img_file)
+                ann_path = os.path.join(
+                    annotation_dir, os.path.splitext(img_file)[0] + ".txt"
+                )
 
-            if not os.path.exists(ann_path):
-                print(f"Warning: No annotation found for {img_file}")
-                bar()
-                continue
+                if not os.path.exists(ann_path):
+                    print(f"Warning: No annotation found for {img_file}")
+                    bar()
+                    continue
 
-            image = cv2.imdecode(np.fromfile(img_path, dtype=np.uint8), -1)
-            if image is None:
-                print(f"Warning: Could not read image {img_path}")
-                bar()
-                continue
+                image = cv2.imdecode(np.fromfile(img_path, dtype=np.uint8), -1)
 
-            annotations = load_yolo_annotations(ann_path)
-            class_ids, polygons = zip(*annotations) if annotations else ([], [])
+                if image.shape[2] == 4:
+                    image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)  # remove alpha
 
-            for i in range(1, num_augs + 1):
-                img_aug, poly_aug = apply_augmentation(image, polygons, augmenter)
-                aug_ann = list(zip(class_ids, poly_aug))
+                if image is None:
+                    print(f"Warning: Could not read image {img_path}")
+                    bar()
+                    continue
 
-                base_name, ext = os.path.splitext(img_file)
-                img_out = os.path.join(output_dir, f"{base_name}_aug_{i}{ext}")
-                ann_out = os.path.join(output_dir, f"{base_name}_aug_{i}.txt")
+                annotations = load_yolo_annotations(ann_path)
+                class_ids, polygons = zip(*annotations) if annotations else ([], [])
 
-                save_augmented(img_aug, aug_ann, img_out, ann_out)
+                for i in range(1, num_augs + 1):
+                    img_aug, poly_aug = apply_augmentation(image, polygons, augmenter)
+                    aug_ann = list(zip(class_ids, poly_aug))
 
+                    base_name, ext = os.path.splitext(img_file)
+                    img_out = os.path.join(output_dir, f"{base_name}_aug_{i}{ext}")
+                    ann_out = os.path.join(output_dir, f"{base_name}_aug_{i}.txt")
+
+                    save_augmented(img_aug, aug_ann, img_out, ann_out)
+
+            except Exception as e:
+                print(f"Error: {e}, {img_path}, {ann_path}")
+                return
             bar()
 
 
