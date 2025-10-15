@@ -1,7 +1,7 @@
 import os
 
 # 請將 folder_rpath 設定為你要處理的資料夾路徑
-folder_path = r"E:\temp\LILIN輕軌標註\20250411\20250407"
+folder_path = r"D:\wan-hai\wan-hai-radar-label\ARPA-ds-2\image-red-rule-2"
 
 # 遍歷資料夾中的所有檔案
 for filename in os.listdir(folder_path):
