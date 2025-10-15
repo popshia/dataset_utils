@@ -6,10 +6,50 @@ import argparse
 from collections import defaultdict
 from dataclasses import dataclass, asdict
 import json
+import sys
 from typing import Dict, List, Optional, Set, Tuple
-
+try:
+    # 讀取影像尺寸用（僅讀表頭，效能負擔小）
+    from PIL import Image  # type: ignore
+except Exception:
+    Image = None  # Pillow 未安裝時允許降級運作
+try:
+    # 若有安裝 tqdm，使用更美觀的進度列；否則退化為簡易百分比輸出到 STDERR
+    from tqdm.auto import tqdm as _tqdm  # type: ignore
+except Exception:
+    _tqdm = None
 IMG_EXTS_DEFAULT = [".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"]
 LABEL_EXT_DEFAULT = ".txt"
+
+
+# --------- 進度列輔助 ---------
+def _progress_iter(iterable, total: Optional[int], desc: str, enabled: bool):
+    """
+    包裝 iterable：
+    - enabled 為 False 時直接回傳原 iterable。
+    - 若可用 tqdm，使用 tqdm；否則以簡易百分比印到 STDERR。
+    """
+    if not enabled:
+        for x in iterable:
+            yield x
+        return
+
+    if _tqdm is not None:
+        # 直接用 tqdm
+        yield from _tqdm(iterable, total=total, desc=desc, unit="file")
+    else:
+        # 簡易百分比
+        count = 0
+        total = int(total) if total is not None else None
+        for x in iterable:
+            count += 1
+            if total:
+                pct = int(count * 100 / total)
+                print(f"\r{desc}: {count}/{total} ({pct}%)", end="", file=sys.stderr)
+            else:
+                print(f"\r{desc}: {count}", end="", file=sys.stderr)
+            yield x
+        print("", file=sys.stderr)
 
 # --------- 路徑配對輔助 ---------
 def _replace_one_component(path: str, src_name_lc: str, dst_name: str) -> Optional[str]:
@@ -110,6 +150,17 @@ def parse_yolo_label_file(path: str) -> Tuple[int, Dict[int, int], Set[int], int
 
     return valid, class_counts, classes_in_file, invalid_lines
 
+# --------- 影像尺寸讀取 ---------
+def get_image_size(path: str) -> Optional[Tuple[int, int]]:
+    """回傳 (width, height)。若未安裝 Pillow 或讀取失敗則回傳 None。"""
+    if Image is None:
+        return None
+    try:
+        with Image.open(path) as im:
+            return im.size  # (w, h)
+    except Exception:
+        return None
+
 # --------- 統計資料結構 ---------
 @dataclass
 class YOLOStats:
@@ -127,17 +178,19 @@ class YOLOStats:
     # 類別統計
     per_class_instances: Dict[int, int] = None
     per_class_image_count: Dict[int, int] = None
-
+    image_size_counts: Dict[str, int] = None
 # --------- 主流程 ---------
 def scan_dataset(
     dataset_root: str,
     img_exts: List[str],
     label_ext: str,
     paired_only: bool = False,
+    show_progress: bool = False,
 ) -> YOLOStats:
     stats = YOLOStats(
         per_class_instances=defaultdict(int),
         per_class_image_count=defaultdict(int),
+        image_size_counts=defaultdict(int),
     )
 
     # 收集所有影像與標註檔
@@ -155,6 +208,18 @@ def scan_dataset(
     stats.images_total = len(images)
     stats.labels_total = len(labels)
 
+    # 單次走訪影像清單：同時統計「尺寸分布」與「有無對應標註」，並提供進度列
+    labeled_images = 0
+    for img in _progress_iter(images, total=len(images), desc="掃描影像（尺寸與標註配對）", enabled=show_progress):
+        # 影像尺寸（若可用 Pillow）
+        if Image is not None:
+            sz = get_image_size(img)
+            if sz:
+                w, h = sz
+                stats.image_size_counts[f"{w}x{h}"] += 1
+        # 標註配對
+        if find_label_for_image(img, label_ext):
+            labeled_images += 1
     # 先算影像是否有標註
     labeled_images = 0
     for img in images:
@@ -167,7 +232,7 @@ def scan_dataset(
     instances_per_labeled_image: List[int] = []
     seen_class_in_image: Dict[int, int] = defaultdict(int)  # 暫存每個標註檔對應到之類別集合大小
 
-    for lab in labels:
+    for lab in _progress_iter(labels, total=len(labels), desc="解析標註檔", enabled=show_progress):
         img = find_image_for_label(lab, img_exts)
         has_pair = img is not None
 
@@ -227,6 +292,16 @@ def print_stats(stats: YOLOStats, class_names: Optional[List[str]] = None):
         ("每張有標註影像之最大實例數", f"{stats.instances_per_image_max}"),
     ]))
     print()
+    # 影像尺寸分布
+    if stats.image_size_counts:
+        print("=== 影像尺寸分布（WxH） ===")
+        print("image size\tcount")
+        for size, cnt in sorted(stats.image_size_counts.items(), key=lambda kv: (-kv[1], kv[0])):
+            print(f"{size}\t{cnt}")
+        print()
+    else:
+        print("（沒有可用的影像尺寸統計；若需啟用請安裝 Pillow：pip install pillow）")
+        print()
 
     # 類別表
     if stats.per_class_instances:
@@ -257,6 +332,11 @@ def main():
         help="僅統計與影像配對成功的標註（忽略孤兒標註）。",
     )
     parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="顯示掃描進度條（若安裝 tqdm 則使用 tqdm，否則顯示簡易百分比；輸出至 STDERR）。\n建議安裝：pip install tqdm",
+    )
+    parser.add_argument(
         "--class-names",
         help="以逗號分隔的類別名稱清單（索引對應 class_id）。例如：'person,car,dog'",
     )
@@ -279,6 +359,7 @@ def main():
         img_exts=img_exts,
         label_ext=args.label_ext,
         paired_only=args.paired_only,
+        show_progress=args.progress,
     )
 
     print_stats(stats, class_names)
@@ -288,6 +369,7 @@ def main():
         # 將 defaultdict 轉一般 dict
         payload["per_class_instances"] = dict(payload["per_class_instances"])
         payload["per_class_image_count"] = dict(payload["per_class_image_count"])
+        payload["image_size_counts"] = dict(payload["image_size_counts"])
         with open(args.out_json, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         print(f"\n已輸出 JSON：{args.out_json}")
