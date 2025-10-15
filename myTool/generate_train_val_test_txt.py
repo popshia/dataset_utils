@@ -17,7 +17,7 @@ from typing import Iterable, List, Sequence, Tuple, Set
 
 # ---------------------------- 公用設定 ----------------------------
 IMG_EXT: Set[str] = {".jpg", ".jpeg", ".png", ".bmp"}
-LABEL_EXT: Set[str] = {".txt"}  # 依需求擴充
+LABEL_EXT: Set[str] = {".txt",".json"}  # 依需求擴充
 DEFAULT_SPLIT_DIRS: Set[str] = {"train", "val", "test"}
 LIST_FILES = {"train.txt", "val.txt", "test.txt"}
 
