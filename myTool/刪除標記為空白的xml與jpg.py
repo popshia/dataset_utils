@@ -42,5 +42,5 @@ def remove_empty_annotations(folder_path):
 if __name__ == "__main__":
     # 使用範例:
     # 將 "path_to_folder" 替換為實際存放 XML 與 JPG 的資料夾路徑
-    path_to_folder = r"E:\temp\LILIN輕軌標註\20250411\20250407"  # 請改成你的路徑
+    path_to_folder = r"F:\20251014-filtered\12"  # 請改成你的路徑
     remove_empty_annotations(path_to_folder)
