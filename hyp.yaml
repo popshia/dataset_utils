@@ -10,5 +10,5 @@ perspective: 0.0  # image perspective (+/- fraction), range 0-0.001
 flipud: 0.0  # image flip up-down (probability)
 fliplr: 0.5  # image flip left-right (probability)
 
-contrast_p: 0.6  # 
+contrast_p: 0.6  # contrast change probability  
 clahe_clip: 2.0  # CLAHE 

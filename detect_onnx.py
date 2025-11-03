@@ -1,4 +1,4 @@
-# Inference using ONNX model
+# Inference using ONNX model (refactored)
 import argparse
 import random
 import time
@@ -24,6 +24,7 @@ from utils.general import (
     letter_box,
     xyxy2xywh,
 )
+
 
 ORT_PROVIDERS = (
     ["CUDAExecutionProvider", "CPUExecutionProvider"]
@@ -79,6 +80,16 @@ class LoadImages:  # for inference
         self.file_count = image_count + video_count  # number of files
         self.video_flag = [False] * image_count + [True] * video_count
         self.mode = "image"
+        self._video_frame_count_map = {}
+        # Pre-calc total frames once for progress accuracy and efficiency
+        for v in videos:
+            cap = cv2.VideoCapture(v)
+            self._video_frame_count_map[v] = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            cap.release()
+        self._image_count = image_count
+        self._total_video_frames = sum(self._video_frame_count_map.values())
+        self._total_frames = self._image_count + self._total_video_frames
+
         if any(videos):
             self.new_video(videos[0])  # new video
         else:
@@ -119,6 +130,7 @@ class LoadImages:  # for inference
 
         else:
             # Read image
+            self.mode = "image"
             self.count += 1
             frame = cv2.imread(path)  # BGR
             assert frame is not None, "Image Not Found " + path
@@ -133,13 +145,14 @@ class LoadImages:  # for inference
     def new_video(self, path):
         self.frame = 0
         self.cap = cv2.VideoCapture(path)
-        self.nframes = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        # Prefer precomputed frame count for accuracy and speed
+        self.nframes = self._video_frame_count_map.get(
+            path, int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        )
 
     def __len__(self):
-        if True in self.video_flag:
-            return int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        else:
-            return self.file_count  # number of files
+        # Return images + all frames across all videos
+        return self._total_frames if True in self.video_flag else self.file_count
 
 
 class LoadStreams:  # multiple IP or RTSP cameras
@@ -167,7 +180,6 @@ class LoadStreams:  # multiple IP or RTSP cameras
     def update(self, cap):
         # Read next stream frame in a daemon thread
         while cap.isOpened():
-            # _, self.imgs[index] = cap.read()
             cap.grab()
             success, im = cap.retrieve()
             self.frame = im if success else self.frame * 0
@@ -197,15 +209,44 @@ class LoadStreams:  # multiple IP or RTSP cameras
         return "".join(str(c) for c in self.sources), im, img0, None, ratio, dwdh
 
     def __len__(self):
-        return 0  # 1E12 frames = 32 streams at 30 FPS for 30 years
+        return 0  # infinite/unknown length for streams
+
+
+def parse_csv_ints(s):
+    if s is None or len(s.strip()) == 0:
+        return None
+    return set(int(x.strip()) for x in s.split(",") if x.strip() != "")
+
+
+def parse_roi(s):
+    if s is None or len(s.strip()) == 0:
+        return None
+    try:
+        x1, y1, x2, y2 = (int(v) for v in s.split(","))
+        return (x1, y1, x2, y2)
+    except Exception:
+        raise argparse.ArgumentTypeError(
+            "--roi must be four integers like 'x1,y1,x2,y2'"
+        )
+
+
+def center_in_roi(xyxy, roi_rect):
+    if roi_rect is None:
+        return False
+    x1, y1, x2, y2 = roi_rect
+    cx = (xyxy[0] + xyxy[2]) / 2
+    cy = (xyxy[1] + xyxy[3]) / 2
+    return (x1 <= cx <= x2) and (y1 <= cy <= y2)
 
 
 def load_video_and_inference(args):
+    # Prepare sessions and class maps
     session_1 = ort.InferenceSession(args.onnx, providers=ORT_PROVIDERS)
     names_1 = get_class_names(args.classes_txt)
     colors_1 = [[random.randint(0, 255) for _ in range(3)] for _ in names_1]
 
-    if args.second_onnx:
+    has_second = args.second_onnx is not None
+    if has_second:
         session_2 = ort.InferenceSession(args.second_onnx, providers=ORT_PROVIDERS)
         names_2 = get_class_names(args.second_classes_txt)
         colors_2 = [[random.randint(0, 255) for _ in range(3)] for _ in names_2]
@@ -228,8 +269,19 @@ def load_video_and_inference(args):
     else:
         dataset = LoadImages(args.source, img_size=args.img_size)
 
+    # --- Config derived from CLI ---
+    target_classes = parse_csv_ints(args.target_classes)
+    roi_rect = parse_roi(args.roi)
+    roi_models = parse_csv_ints(args.roi_models)
+    roi_classes = (
+        parse_csv_ints(args.roi_classes)
+        if args.roi_classes is not None
+        else (parse_csv_ints(args.target_classes) if args.target_classes else None)
+    )
+
     t0 = time.time()
     with alive_bar(len(dataset)) as bar:
+        # State for downstream logic (kept for backward-compat)
         human_in_roi = False
         approved = False
         without_buckle = False
@@ -242,11 +294,13 @@ def load_video_and_inference(args):
             t1 = time.time()
 
             pred = inference_with_onnx_session(session_1, img)
-            model_predictions.append(pred)
+            model_predictions.append((0, pred, names_1, colors_1, args.conf_thres))
 
-            if args.second_onnx:
+            if has_second:
                 pred_2 = inference_with_onnx_session(session_2, img)
-                model_predictions.append(pred_2)
+                model_predictions.append(
+                    (1, pred_2, names_2, colors_2, args.second_conf_thres)
+                )
 
             t2 = time.time()
 
@@ -263,140 +317,79 @@ def load_video_and_inference(args):
             im0 = cv2.cvtColor(im0, cv2.COLOR_RGB2BGR)
             gn = np.array(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
 
-            # Process detections
-            for i, pred in enumerate(model_predictions):
-                names, colors, conf_thres = (
-                    (names_1, colors_1, args.conf_thres)
-                    if i == 0
-                    else (names_2, colors_2, args.second_conf_thres)
-                )
-
+            # Process detections for each model's output
+            for model_idx, pred, names, colors, conf_thres in model_predictions:
                 if len(pred):
-                    # Print results
+                    # Print results summary
                     for c in np.unique(pred[:, -2]):
-                        n = np.logical_and(
-                            pred[:, -2] == c, pred[:, -1] > conf_thres
-                        ).sum()  # detections per class
+                        n = np.logical_and(pred[:, -2] == c, pred[:, -1] > conf_thres).sum()
                         if n > 0:
-                            s += (
-                                f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-                            )
+                            s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "
 
                     if args.save_boxes:
-                        for i, (_, *xyxy, _, _) in enumerate(pred):  # detection boxes
+                        for j, (_, *xyxy, _, _) in enumerate(pred):  # detection boxes
+                            xyxy = np.array(xyxy, dtype=np.float32)
                             xyxy -= np.array(dwdh * 2)
                             xyxy /= ratio
                             xyxy = xyxy.round().astype(np.int32).tolist()
+                            x1, y1, x2, y2 = xyxy
+                            x1, y1 = max(x1, 0), max(y1, 0)
+                            x2, y2 = min(x2, im0.shape[1] - 1), min(y2, im0.shape[0] - 1)
                             cv2.imwrite(
-                                save_path[:-4] + f"_box_{i+1}" + save_path[-4:],
-                                im0[xyxy[1] : xyxy[3], xyxy[0] : xyxy[2]].copy(),
+                                save_path[:-4] + f"_box_{j+1}" + save_path[-4:],
+                                im0[y1:y2, x1:x2].copy(),
                             )
 
-                    for _, *xyxy, cls, conf in pred:  # detections per image
-                        # if conf > conf_thres:
-                        if conf > conf_thres and int(cls) == 0:
-                            xyxy -= np.array(dwdh * 2)
-                            xyxy /= ratio
-                            xyxy = xyxy.round().astype(np.int32).tolist()
+                    # Draw and optional ROI logic
+                    for _, *xyxy, cls, conf in pred:
+                        if conf <= conf_thres:
+                            continue
+                        cls_int = int(cls)
+                        if (target_classes is not None) and (cls_int not in target_classes):
+                            continue
 
-                            # check person x coordinate
-                            if i == 1 and int(cls) == 0:
-                                human_in_roi = (
-                                    True
-                                    if 765 < (xyxy[0] + xyxy[2]) / 2 < 1470
-                                    else False
-                                )
-                                print(human_in_roi)
+                        xyxy = np.array(xyxy, dtype=np.float32)
+                        xyxy -= np.array(dwdh * 2)
+                        xyxy /= ratio
+                        xyxy = xyxy.round().astype(np.int32).tolist()
 
-                            # Plot box
-                            if args.no_label:
-                                label = None
-                            else:
-                                label = f"{names[int(cls)]} {conf:.2f}"
+                        # ROI check: configurable
+                        if roi_rect is not None:
+                            check_model = (roi_models is None) or (model_idx in roi_models)
+                            check_class = (roi_classes is None) or (cls_int in roi_classes)
+                            if check_model and check_class:
+                                if center_in_roi(xyxy, roi_rect):
+                                    human_in_roi = True
+                                if args.print_roi:
+                                    print(f"ROI hit (model={model_idx}, cls={cls_int}): {human_in_roi}")
 
-                            plot_one_box(xyxy, im0, label, colors[int(cls)])
+                        # Plot box & label
+                        label = None if args.no_label else f"{names[cls_int]} {conf:.2f}"
+                        plot_one_box(xyxy, im0, label, colors[cls_int])
 
-                            if args.save_txt:
-                                xywh = xyxy2xywh(xyxy / gn)
-                                line = (
-                                    (cls, *xywh, conf)
-                                    if args.save_conf
-                                    else (cls, *xywh)
-                                )  # label format
-                                with open(txt_path + ".txt", "a") as f:
-                                    f.write(("%g " * len(line)).rstrip() % line + "\n")
+                        if args.save_txt:
+                            xywh = xyxy2xywh(np.array(xyxy) / gn)
+                            line = (cls, *xywh, conf) if args.save_conf else (cls, *xywh)
+                            with open(txt_path + ".txt", "a") as f:
+                                f.write(("%g " * len(line)).rstrip() % line + "\n")
 
-            result_str = (
-                f"{s}({(1E3 * (t2 - t1)):.1f}ms) Inference, {int(1/(t2-t1))} fps."
-            )
+            result_str = f"{s}({(1E3 * (t2 - t1)):.1f}ms) Inference, {int(1/(t2-t1))} fps."
             print(result_str)
 
-            # check human and buckle ############################################################
-            # text_pos = (25, 25)
-            # red = [0, 0, 255]
-            # green = [0, 255, 0]
-            # border_img = im0[10 : im0.shape[0] - 10, 10 : im0.shape[1] - 10]
-            #
-            # if (human_in_roi and "buckle_fastened" not in result_str) or (
-            #     human_in_roi
-            #     and "person" in result_str
-            #     and "buckle_fastened" not in result_str
-            # ):
-            #     nothing_start_time = 0
-            #
-            #     if without_buckle_start_time == 0:
-            #         without_buckle_start_time = int(time.time())
-            #
-            #     without_buckle_timer = int(time.time()) - without_buckle_start_time
-            #
-            #     if 3 <= without_buckle_timer < 6:
-            #         text = f"ALARM {without_buckle_timer}"
-            #         approved = False
-            #     elif without_buckle_timer >= 6:
-            #         text = f"SEND ALARM! {without_buckle_timer}"
-            #         im0 = cv2.copyMakeBorder(
-            #             border_img, 10, 10, 10, 10, cv2.BORDER_CONSTANT, None, red
-            #         )
-            #         approved = False
-            #     else:
-            #         text = f"Countdown: {without_buckle_timer}"
-            #
-            #     if approved:
-            #         plot_alarm_message(text_pos, im0, text, green)
-            #     else:
-            #         plot_alarm_message(text_pos, im0, text, red)
-            # elif (
-            #     human_in_roi
-            #     and "person" in result_str
-            #     and "buckle_fastened" in result_str
-            # ):
-            #     nothing_start_time = 0
-            #     without_buckle_start_time = 0
-            #     plot_alarm_message(text_pos, im0, "APPROVED!", green)
-            #     approved = True
-            # else:
-            #     if approved:
-            #         if nothing_start_time == 0:
-            #             nothing_start_time = int(time.time())
-            #
-            #         nothing_timer = int(time.time()) - nothing_start_time
-            #
-            #         if nothing_timer < 2:
-            #             cv2.putText(
-            #                 im0, "APPROVED!", text_pos, 0, 3, green, 3, cv2.LINE_AA
-            #             )
-            #             plot_alarm_message(text_pos, im0, "APPROVED!", green)
-            #         else:
-            #             approved = False
-            #####################################################################################
+            # (Optional) alarm logic kept commented-out
+            # ...
 
             # Stream results
             if args.view_img and (dataset.mode == "video" or dataset.mode == "stream"):
-                img_show = (
-                    cv2.resize(im0, (1280, 720))
-                    if im0.shape[1] > im0.shape[2]
-                    else cv2.resize(im0, (720, 1280))
-                )
+                # Fix orientation check: compare width vs height
+                if im0.shape[1] >= im0.shape[0]:
+                    img_show = cv2.resize(im0, (1280, 720))
+                else:
+                    img_show = cv2.resize(im0, (720, 1280))
+                # Optionally draw ROI rectangle for debugging
+                if roi_rect is not None and args.draw_roi:
+                    x1, y1, x2, y2 = roi_rect
+                    cv2.rectangle(img_show, (x1, y1), (x2, y2), (0, 255, 255), 2)
                 cv2.imshow("result", img_show)
                 if cv2.waitKey(1) == ord("q"):
                     exit(0)
@@ -432,7 +425,7 @@ if __name__ == "__main__":
         description="""
 Export .pt weight file with command below:
 
-> python export.py --weights ./{YOUR_PT_FILE}.pt --grid --end2end --simplify --topk-all 100 \\
+> python export.py --weights ./{YOUR_PT_FILE}.pt --grid --end2end --simplify --topk-all 100 \
   --iou-thres 0.65 --conf-thres 0.35 --img-size {img_size} {img_size} --max-wh {img_size}
 
 Inference data with yolov7 exported onnx model file.
@@ -460,5 +453,42 @@ during inference, press "q" to close result window or skip to next data.""",
         "--exist-ok", action="store_true", help="do not increment directory"
     )
     parser.add_argument("--view-img", action="store_true", help="view result")
+
+    # --- New configurables ---
+    parser.add_argument(
+        "--target-classes",
+        type=str,
+        default=None,
+        help="comma-separated class ids to draw/save (default: all classes)",
+    )
+    parser.add_argument(
+        "--roi",
+        type=str,
+        default=None,
+        help="ROI rectangle in pixels as x1,y1,x2,y2 (default: disabled)",
+    )
+    parser.add_argument(
+        "--roi-models",
+        type=str,
+        default=None,
+        help="comma-separated model indices to apply ROI on (0=first,1=second; default: all if --roi is set)",
+    )
+    parser.add_argument(
+        "--roi-classes",
+        type=str,
+        default=None,
+        help="comma-separated class ids to apply ROI check on (default: same as --target-classes or all)",
+    )
+    parser.add_argument(
+        "--print-roi",
+        action="store_true",
+        help="print ROI hit flag for debugging",
+    )
+    parser.add_argument(
+        "--draw-roi",
+        action="store_true",
+        help="draw ROI rectangle when --view-img is enabled",
+    )
+
     args = parser.parse_args()
     load_video_and_inference(args)

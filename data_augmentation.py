@@ -143,15 +143,14 @@ def read_images(images):
     return org_images
 
 
-def read_labels(txts, images):
+def read_labels(txts, images):  # images: List[np.ndarray]
     org_bbs = []
     for i, txt in enumerate(txts):
         labels = load_label(txt)
         if labels.shape[0] != 0:
             labels[:, 1:] = xywh2xyxy(labels[:, 1:])
 
-        img_path = images[i].as_posix()
-        image_shape = cv2.imread(img_path).shape
+        image_shape = images[i].shape  # (H, W, C)
         org_bbs.append(label_to_ia_bbx(labels, image_shape))
     return org_bbs
 
@@ -251,7 +250,7 @@ def aug_img(dataset, seq, new_image_count, no_background):
     print("reading images and labels to memory and split batches...")
     for i in range(len(image_list_batches)):
         images = read_images(image_list_batches[i])
-        labels = read_labels(label_list_batches[i], image_list_batches[i])
+        labels = read_labels(label_list_batches[i], images)
         aug_batch.append(
             [
                 Batch(images=images, bounding_boxes=labels, data=image_list_batches[i])
