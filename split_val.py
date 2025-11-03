@@ -1,32 +1,26 @@
 import argparse
+import os
 import shutil
-from hmac import new
 from pathlib import Path
 from random import randrange
 
-from alive_progress import alive_bar
-
 
 def create_dirs_and_move_files(file_list, dest):
-    with alive_bar(len(file_list)) as bar:
-        for file in file_list:
-            new_path = Path(Path.cwd())
-            parents = file.parent.as_posix().split("/")[1:]
-            parents.insert(0, dest)
-            for parent in parents:
-                new_path = new_path.joinpath(parent)
+    for file in file_list:
+        new_path = Path(Path.cwd())
+        parents = file.parent.as_posix().split("/")[1:]
+        parents.insert(0, dest)
+        for parent in parents:
+            new_path = new_path.joinpath(parent)
+        Path.mkdir(new_path, parents=True, exist_ok=True)
+        print(new_path)
+        print(file, file.with_suffix(".txt"))
 
-            txt_path = new_path.parts
-            txt_path = txt_path[:-2] + ("labels",) + txt_path[-1:]
-            txt_path = Path(*txt_path)
-            Path.mkdir(txt_path, parents=True, exist_ok=True)
-            Path.mkdir(new_path, parents=True, exist_ok=True)
-            shutil.copy(file, new_path)
+        shutil.copy(file, new_path)
+        if Path(file.with_suffix(".txt")).exists():
+            shutil.copy(file.with_suffix(".txt"), new_path)
 
-            if Path(file.with_suffix(".txt")).exists():
-                shutil.copy(file.with_suffix(".txt"), txt_path)
-
-            bar()
+        print("-" * os.get_terminal_size().columns)
 
 
 def split_train_val(args):
@@ -47,9 +41,9 @@ def split_train_val(args):
     for _ in range(test_file_count):
         test_file_list.append(all_file_list.pop(randrange(len(all_file_list))))
 
-    create_dirs_and_move_files(train_file_list, "./split_dataset/images/train")
-    create_dirs_and_move_files(val_file_list, "./split_dataset/images/val")
-    create_dirs_and_move_files(test_file_list, "./split_dataset/images/test")
+    create_dirs_and_move_files(train_file_list, "./train")
+    create_dirs_and_move_files(val_file_list, "./val")
+    create_dirs_and_move_files(test_file_list, "./test")
 
     print(
         f"train split: {len(train_file_list)}, val split: {len(val_file_list)}, test split: {len(test_file_list)}"

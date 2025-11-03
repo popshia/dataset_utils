@@ -45,9 +45,9 @@ def plot_one_box(box, img, label, color):
         )
 
 
-def plot_one_message(org, img, text, color):
+def plot_alarm_message(org, img, text, color):
     x, y = org
-    t_size = cv2.getTextSize(text, 0, fontScale=2, thickness=3)[0]
+    t_size = cv2.getTextSize(text, 0, fontScale=3, thickness=3)[0]
     t_w, t_h = t_size
     # sum
     cv2.rectangle(
@@ -63,7 +63,7 @@ def plot_one_message(org, img, text, color):
         text,
         (x, y + t_h),
         0,
-        2,
+        3,
         [255, 255, 255],
         thickness=3,
         lineType=cv2.LINE_AA,
