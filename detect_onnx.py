@@ -283,7 +283,7 @@ def load_video_and_inference(args):
                             xyxy /= ratio
                             xyxy = xyxy.round().astype(np.int32).tolist()
                             cv2.imwrite(
-                                save_path[:-4] + f"_box_{i+1}" + save_path[-4:],
+                                save_path[:-4] + f"_box_{i + 1}" + save_path[-4:],
                                 im0[xyxy[1] : xyxy[3], xyxy[0] : xyxy[2]].copy(),
                             )
 
@@ -312,7 +312,7 @@ def load_video_and_inference(args):
                                     f.write(("%g " * len(line)).rstrip() % line + "\n")
 
             result_str = (
-                f"{s}({(1E3 * (t2 - t1)):.1f}ms) Inference, {int(1/(t2-t1))} fps."
+                f"{s}({(1e3 * (t2 - t1)):.1f}ms) Inference, {int(1 / (t2 - t1))} fps."
             )
             print(result_str)
 
